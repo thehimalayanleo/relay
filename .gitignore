@@ -1,0 +1,4 @@
+.data/
+.pods/
+node_modules/
+*.log

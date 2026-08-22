@@ -1,0 +1,43 @@
+{
+  "title": "Resume the parser repair",
+  "goal": "Fix the parser regression without changing the public API.",
+  "acceptanceCriteria": [
+    "Targeted parser tests pass",
+    "The full test suite has no new failures"
+  ],
+  "state": {
+    "completed": ["Reproduced the regression", "Added a failing targeted test"],
+    "partial": ["A candidate parser change exists but is not fully validated"],
+    "blocked": []
+  },
+  "decisions": ["Preserve the public API"],
+  "constraints": ["Do not edit the golden fixtures"],
+  "rejectedApproaches": ["A regex-only patch failed on nested input"],
+  "openQuestions": ["Does the full suite require Docker?"],
+  "artifacts": [
+    {
+      "label": "Parser source",
+      "uri": "src/parser.js",
+      "digest": "",
+      "status": "unverified"
+    }
+  ],
+  "validation": [
+    {
+      "command": "npm test -- parser",
+      "result": "1 expected failure reproduces the bug",
+      "status": "failed"
+    }
+  ],
+  "sideEffects": [],
+  "traceSummary": "The failure is isolated to nested delimiters. The regex-only approach was rejected.",
+  "nextAction": "Inspect the candidate parser change and run the targeted parser test.",
+  "stopConditions": ["Stop if the public API snapshot changes"],
+  "source": {
+    "harness": "codex",
+    "model": "example-model",
+    "actor": "agent-1",
+    "taskId": "example-task"
+  },
+  "intendedRecipient": "agent-2"
+}

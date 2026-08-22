@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Receive PassOn</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="shell receiver-shell">
+      <header>
+        <div><p class="eyebrow">Responsibility transfer</p><h1 id="title">Loading checkpoint…</h1></div>
+        <span id="status" class="protocol">checking</span>
+      </header>
+      <section class="card">
+        <div class="card-head"><div><p class="step">01 / Verify</p><h2>Sealed state</h2></div><code id="digest"></code></div>
+        <div id="summary" class="summary"></div>
+        <div id="pod-card" class="pod-card" hidden>
+          <div><p class="step">WORK POD</p><strong id="pod-title">Ready to pull</strong><small id="pod-detail"></small></div>
+          <button id="pull-pod" type="button">Pull pod context</button>
+        </div>
+        <div class="adapter-row">
+          <label>Resume in
+            <select id="target">
+              <option value="codex">Codex</option>
+              <option value="claude">Claude Code</option>
+              <option value="cursor">Cursor</option>
+              <option value="generic">Generic agent</option>
+              <option value="human">Human review</option>
+            </select>
+          </label>
+          <button id="copy-prompt" type="button">Copy resume prompt</button>
+        </div>
+      </section>
+      <section class="card">
+        <div class="card-head"><div><p class="step">02 / Acknowledge</p><h2>Accept responsibility</h2></div></div>
+        <label>Your name or agent ID<input id="actor" placeholder="recipient"></label>
+        <label>Restate the objective<textarea id="restated-goal" rows="3"></textarea></label>
+        <label>Your first action<textarea id="first-action" rows="3"></textarea></label>
+        <button id="accept" type="button">Accept and issue receipt</button>
+        <p id="notice" class="notice">Acceptance records what the recipient understood before work resumes.</p>
+      </section>
+    </main>
+    <script type="module" src="/receiver.js"></script>
+  </body>
+</html>

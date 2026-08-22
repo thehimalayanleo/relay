@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Forge Agent Workspace</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body class="workspace-body">
+    <div class="app-frame">
+      <aside class="app-sidebar">
+        <div class="app-brand"><span>F</span><strong>FORGE</strong></div>
+        <nav>
+          <a class="active" href="#">⌁ Agent run</a>
+          <a href="#">▱ Files</a>
+          <a href="#">✓ Checks</a>
+          <a href="#">◫ Memory</a>
+        </nav>
+        <div class="sidebar-foot"><span class="live-dot"></span> Local harness</div>
+      </aside>
+
+      <main class="agent-workspace">
+        <header class="workspace-head">
+          <div><p>ACTIVE TASK</p><h1>Parser reliability pass</h1></div>
+          <div class="run-state"><span></span> RUNNING · 42M</div>
+        </header>
+
+        <section class="workspace-grid">
+          <article class="work-panel conversation">
+            <div class="panel-title"><span>AGENT TRACE</span><code>run_8f21</code></div>
+            <div class="message human"><small>YOU</small><p>Finish the parser repair. Preserve the public API and verify the malformed-input cases.</p></div>
+            <div class="message agent"><small>AGENT</small><p>I found the failure boundary in <code>src/protocol.mjs</code>. The targeted tests now pass, but the full suite still needs to run.</p></div>
+            <pre><span class="line-no">118</span> const normalized = normalizeCapsule(input)
+<span class="line-no">119</span> if (!normalized.goal) throw protocolError("goal")
+<span class="line-no">120</span> return seal(normalized)</pre>
+            <div class="tool-call"><span>✓</span><div><strong>Targeted validation</strong><small>4 protocol tests passed in 0.18s</small></div></div>
+            <div class="message agent pending"><small>AGENT</small><p>Next I will run the full suite and compare the generated capsule digest before editing the adapter.</p></div>
+          </article>
+
+          <aside class="work-panel run-context">
+            <div class="panel-title"><span>RUN CONTEXT</span><code>H2 READY</code></div>
+            <div class="context-block"><small>OBJECTIVE</small><p>Ship a verified parser repair without changing the public API.</p></div>
+            <div class="context-block"><small>COMPLETED</small><ul><li>Failure reproduced</li><li>Targeted patch applied</li><li>4 tests passed</li></ul></div>
+            <div class="context-block"><small>BOUNDARY</small><p>Full suite has not run. No release has been created.</p></div>
+            <div class="context-block next"><small>NEXT SAFE ACTION</small><p>Run <code>npm test</code>, inspect failures, then compare the sealed digest.</p></div>
+          </aside>
+        </section>
+      </main>
+    </div>
+
+    <script id="context-source" type="application/json">
+      {
+        "title": "Resume the parser reliability pass",
+        "goal": "Ship a verified parser repair without changing the public API.",
+        "acceptanceCriteria": ["The full test suite passes", "The public adapter contract remains stable"],
+        "state": {
+          "completed": ["Failure reproduced", "Targeted patch applied", "Four protocol tests passed"],
+          "partial": ["Full suite has not run"],
+          "blocked": []
+        },
+        "decisions": ["Keep normalization at the protocol boundary"],
+        "constraints": ["Preserve the public API", "Do not claim the full suite passed until it runs"],
+        "rejectedApproaches": ["Silently coercing malformed capsule fields"],
+        "openQuestions": ["Do downstream adapters depend on the previous error message?"],
+        "artifacts": [],
+        "validation": [],
+        "sideEffects": [],
+        "traceSummary": "The malformed-input failure was reproduced in src/protocol.mjs. A targeted normalization patch is in place and four protocol tests pass. The full suite has not run. No release or external side effect has occurred.",
+        "nextAction": "Run npm test, inspect any failures, and compare the sealed capsule digest before editing an adapter.",
+        "stopConditions": ["Stop if the full suite reveals a public API regression"],
+        "source": { "harness": "Forge web agent", "actor": "local-user" },
+        "camp": { "protocolVersion": "camp/0.1", "trust": "partially-verified", "retention": "explicit", "learningDisposition": "candidate" }
+      }
+    </script>
+
+    <passon-button source="#context-source" source-app="Forge Agent" default-target="claude"></passon-button>
+    <script type="module" src="/passon-button.js"></script>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

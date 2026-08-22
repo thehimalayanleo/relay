@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://passon.local/schema/passon-v1.schema.json",
+  "title": "PassOn Capsule v1",
+  "type": "object",
+  "required": ["title", "goal", "nextAction"],
+  "properties": {
+    "title": { "type": "string", "minLength": 1 },
+    "goal": { "type": "string", "minLength": 1 },
+    "acceptanceCriteria": { "type": "array", "items": { "type": "string" } },
+    "state": {
+      "type": "object",
+      "properties": {
+        "completed": { "type": "array", "items": { "type": "string" } },
+        "partial": { "type": "array", "items": { "type": "string" } },
+        "blocked": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "decisions": { "type": "array", "items": { "type": "string" } },
+    "constraints": { "type": "array", "items": { "type": "string" } },
+    "rejectedApproaches": { "type": "array", "items": { "type": "string" } },
+    "openQuestions": { "type": "array", "items": { "type": "string" } },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "label": { "type": "string" },
+          "uri": { "type": "string" },
+          "digest": { "type": "string" },
+          "status": { "enum": ["verified", "unverified", "missing"] }
+        },
+        "additionalProperties": false
+      }
+    },
+    "validation": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "command": { "type": "string" },
+          "result": { "type": "string" },
+          "status": { "enum": ["passed", "failed", "blocked", "not_run"] }
+        },
+        "additionalProperties": false
+      }
+    },
+    "sideEffects": { "type": "array", "items": { "type": "string" } },
+    "traceSummary": { "type": "string" },
+    "nextAction": { "type": "string", "minLength": 1 },
+    "stopConditions": { "type": "array", "items": { "type": "string" } },
+    "source": {
+      "type": "object",
+      "properties": {
+        "harness": { "type": "string" },
+        "model": { "type": "string" },
+        "actor": { "type": "string" },
+        "taskId": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "intendedRecipient": { "type": "string" }
+  },
+  "additionalProperties": false
+}

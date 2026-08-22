@@ -1,0 +1,27 @@
+{
+  "name": "passon-protocol",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Portable, verified continuation checkpoints for people and AI agent harnesses.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/thehimalayanleo/passon-context-port.git"
+  },
+  "bin": {
+    "passon": "./bin/passon.mjs"
+  },
+  "exports": {
+    ".": "./src/client.mjs",
+    "./protocol": "./src/protocol.mjs"
+  },
+  "scripts": {
+    "start": "node src/server.mjs",
+    "test": "node --test",
+    "cost": "node scripts/cost-model.mjs",
+    "evaluate": "node scripts/evaluate.mjs examples/eval-results.example.json"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

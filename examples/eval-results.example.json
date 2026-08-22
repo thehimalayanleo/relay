@@ -1,0 +1,9 @@
+{
+  "label": "ILLUSTRATIVE ONLY - replace with measured runs",
+  "runs": [
+    { "condition": "fresh", "success": false, "resumeMinutes": 28, "inputTokens": 4200, "repeatedActions": 6, "falseInheritedClaims": 0 },
+    { "condition": "raw_transcript", "success": true, "resumeMinutes": 19, "inputTokens": 82000, "repeatedActions": 4, "falseInheritedClaims": 1 },
+    { "condition": "naive_summary", "success": false, "resumeMinutes": 11, "inputTokens": 6400, "repeatedActions": 2, "falseInheritedClaims": 2 },
+    { "condition": "passon", "success": true, "resumeMinutes": 6, "inputTokens": 9100, "repeatedActions": 1, "falseInheritedClaims": 0 }
+  ]
+}
