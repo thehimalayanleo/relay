@@ -427,9 +427,10 @@ export async function createRelayServer(options = {}) {
             sessionId: session.id,
             onProgress: (chunk) => {
               const now = Date.now();
-              if (now - lastProgressAt < 1_500) return;
-              lastProgressAt = now;
               const detail = agentProgressSummary(chunk);
+              const meaningful = detail.startsWith("Writing:") || detail.startsWith("Using ");
+              if (!meaningful && now - lastProgressAt < 1_500) return;
+              lastProgressAt = now;
               progressWrites = progressWrites.then(() => sessions.addActivity(session.id, token, { type: "agent-progress", actor: requestedBy, detail })).catch(() => {});
             },
           });
