@@ -140,17 +140,18 @@ async function discoverWorkspaces() {
     }
     const words = byId("session-title").value.toLowerCase().split(/\W+/).filter((word) => word.length > 2);
     const options = discoveredWorkspaces.map((pr) => ({ name: pr.repository.name, prNumber: pr.number, title: pr.title, branch: pr.branches?.source, score: words.filter((word) => `${pr.title} ${pr.repository.name}`.toLowerCase().includes(word)).length })).sort((a, b) => b.score - a.score).slice(0, 8);
-    byId("workspace-results").innerHTML = options.length ? options.map((item, index) => `<label class="workspace-option"><input type="radio" name="workspace" value="${index}"><b>${esc(item.title)}</b><small>${esc(item.name)} · PR #${item.prNumber}</small></label>`).join("") : '<span style="color:#777;font-size:12px">No active pull requests found. Start a clean repository below.</span>';
+    byId("workspace-results").innerHTML = options.length ? options.map((item, index) => `<label class="workspace-option"><input type="radio" name="workspace" value="${index}"><b>${esc(item.title)}</b><small>${esc(item.name)} · PR #${item.prNumber}</small></label>`).join("") : '<span style="color:#777;font-size:12px">No active pull requests found. Start locally below.</span>';
     for (const input of document.querySelectorAll('input[name="workspace"]')) input.onchange = () => { selectedWorkspace = options[Number(input.value)]; byId("create-session").disabled = false; };
-  } catch (error) { byId("workspace-results").innerHTML = `<span style="color:#888;font-size:12px">${esc(error.message)}. You can start a clean repository instead.</span>`; }
+  } catch (error) { byId("workspace-results").innerHTML = `<span style="color:#888;font-size:12px">${esc(error.message)}. You can start locally instead.</span>`; }
 }
 async function createSession(repository) {
-  const created = await json(await fetch("/v1/sessions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ title: byId("session-title").value, creatorRole: "swe", repository: { ...repository, remote: "github", defaultBranch: repository.defaultBranch ?? "main" } }) }));
+  const target = repository ?? { name: "Local workspace", remote: "local", defaultBranch: "", prNumber: null };
+  const created = await json(await fetch("/v1/sessions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ title: byId("session-title").value, creatorRole: "swe", repository: target }) }));
   history.replaceState(null, "", new URL(created.creatorUrl).hash); dialog.close(); await connect(fromHash());
 }
 byId("new-session").onclick = () => { selectedWorkspace = null; byId("create-session").disabled = true; dialog.showModal(); discoverWorkspaces(); }; byId("close-sheet").onclick = () => dialog.close();
 let discoveryTimer; byId("session-title").oninput = () => { clearTimeout(discoveryTimer); discoveryTimer = setTimeout(discoverWorkspaces, 350); };
-byId("create-repo").onclick = async () => { const title = byId("session-title").value.trim(); if (!title) return byId("session-title").focus(); const name = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 70) || "relay-workspace"; byId("create-repo").disabled = true; try { const repo = await json(await fetch("/v1/integrations/github/repositories", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name, description: title }) })); await createSession({ name: repo.name, prNumber: null, defaultBranch: repo.defaultBranch }); } catch (e) { byId("session-error").textContent = e.message; } finally { byId("create-repo").disabled = false; } };
+byId("create-local").onclick = async () => { const title = byId("session-title").value.trim(); if (!title) return byId("session-title").focus(); byId("create-local").disabled = true; try { await createSession(); } catch (e) { byId("session-error").textContent = e.message; } finally { byId("create-local").disabled = false; } };
 byId("session-form").onsubmit = async (event) => { event.preventDefault(); if (!selectedWorkspace) return; byId("create-session").disabled = true; try { await createSession(selectedWorkspace); } catch (e) { byId("session-error").textContent = e.message; } finally { byId("create-session").disabled = false; } };
 window.addEventListener("hashchange", () => { const next = fromHash(); if (next && next.id !== active?.id) connect(next).catch((e) => status(e.message)); });
 

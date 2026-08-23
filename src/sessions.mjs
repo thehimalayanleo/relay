@@ -33,9 +33,16 @@ function sessionError(code, message) {
 function normalizeRepository(input = {}) {
   const name = text(input.name, 240);
   const prNumber = input.prNumber == null ? null : Number(input.prNumber);
-  if (!name || (prNumber !== null && (!Number.isInteger(prNumber) || prNumber <= 0))) {
-    throw new TypeError("A GitHub repository and, when supplied, a positive PR number are required.");
+  if (prNumber !== null && (!Number.isInteger(prNumber) || prNumber <= 0)) {
+    throw new TypeError("When supplied, the PR number must be positive.");
   }
+  if (!name) return {
+    name: "Local workspace",
+    remote: "local",
+    defaultBranch: "",
+    branch: "",
+    prNumber: null,
+  };
   return {
     name,
     remote: text(input.remote, 40) || "github",

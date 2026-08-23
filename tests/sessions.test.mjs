@@ -14,6 +14,18 @@ async function fixture({ greptileClient, now } = {}) {
 
 const repository = { name: "thehimalayanleo/relay", prNumber: 7, defaultBranch: "main" };
 
+test("a local session starts without GitHub", async () => {
+  const { service } = await fixture();
+  const created = await service.create({ title: "Local investigation" });
+  assert.deepEqual(created.record.repository, {
+    name: "Local workspace",
+    remote: "local",
+    defaultBranch: "",
+    branch: "",
+    prNumber: null,
+  });
+});
+
 test("a new GitHub repository can start before its first pull request", async () => {
   const { service } = await fixture();
   const created = await service.create({ title: "Start clean", repository: { name: "acme/new-work", prNumber: null } });
