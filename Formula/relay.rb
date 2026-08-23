@@ -1,9 +1,9 @@
 class Relay < Formula
   desc "Carry active work between people and AI agents"
   homepage "https://github.com/thehimalayanleo/relay"
-  url "https://github.com/thehimalayanleo/relay/archive/b70633c.tar.gz"
+  url "https://github.com/thehimalayanleo/relay/archive/baaa42e.tar.gz"
   version "0.1.0"
-  sha256 "a4b2b1d89102e78a869a40a61d3bb29175bdfe1d10fea9dc549049a9899646c5"
+  sha256 "320e8d45ac973cd39679d3bb1ee81c033b1627212f3e637b3554cb6c1fda4944"
   license "MIT"
 
   depends_on "node"
@@ -31,8 +31,11 @@ class Relay < Formula
         brew services stop relay
         RELAY_WORK_POD_PROVIDER=sail SAIL_API_KEY="..." relay serve
 
-      Dashboard:
-        http://127.0.0.1:4317/demo/greptile
+      Host setup:
+        relay configure
+        relay serve --host 0.0.0.0 --public-url http://<tailscale-name>:4317
+
+      Collaborators only open the generated invite link. They need no installation or keys.
 
       Never put SAIL_API_KEY in a handoff, URL, browser field, or capsule.
     EOS
