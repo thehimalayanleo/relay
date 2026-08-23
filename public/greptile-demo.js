@@ -12,7 +12,14 @@ const authHeaders = (extra = {}) => ({ authorization: `Bearer ${active.token}`, 
 function fromHash() { const p = new URLSearchParams(location.hash.slice(1)); const role = ["pm", "collaborator"].includes(p.get("role")) ? p.get("role") : "swe"; return p.get("session") && p.get("token") ? { id: p.get("session"), token: p.get("token"), role } : null; }
 function person() { return ["pm", "collaborator"].includes(active.role) ? { id: `sanjana-swe-${active.id}`, name: "Sanjana", role: "SWE", color: "#ff5a1f" } : { id: `ajinkya-swe-${active.id}`, name: "Ajinkya", role: "SWE", color: "#7aa2f7" }; }
 function recents() { try { return JSON.parse(localStorage.getItem(RECENTS_KEY) ?? "[]"); } catch { return []; } }
-function remember() { const item = { ...active, title: snapshot.title, lastOpenedAt: new Date().toISOString() }; localStorage.setItem(RECENTS_KEY, JSON.stringify([item, ...recents().filter((x) => x.id !== item.id)].slice(0, 12))); renderSessions(); }
+function remember() {
+  const item = { ...active, title: snapshot.title, updatedAt: snapshot.updatedAt };
+  const merged = [item, ...recents().filter((entry) => entry.id !== item.id)]
+    .sort((a, b) => new Date(b.updatedAt ?? 0).getTime() - new Date(a.updatedAt ?? 0).getTime())
+    .slice(0, 12);
+  localStorage.setItem(RECENTS_KEY, JSON.stringify(merged));
+  renderSessions();
+}
 const status = (message) => { byId("truth").textContent = message; };
 
 function renderSessions() {
