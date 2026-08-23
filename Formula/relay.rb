@@ -1,9 +1,9 @@
 class Relay < Formula
   desc "Carry active work between people and AI agents"
   homepage "https://github.com/thehimalayanleo/relay"
-  url "https://github.com/thehimalayanleo/relay/archive/cd57a34a98e840acacca006e45e0bd99fe2e3191.tar.gz"
+  url "https://github.com/thehimalayanleo/relay/archive/b70633c.tar.gz"
   version "0.1.0"
-  sha256 "3fd99fb5bf9eb5f1e7a1d261df0ad00240be1e7b43da69c94da40146b56ee181"
+  sha256 "a4b2b1d89102e78a869a40a61d3bb29175bdfe1d10fea9dc549049a9899646c5"
   license "MIT"
 
   depends_on "node"
@@ -30,6 +30,9 @@ class Relay < Formula
       For Sail, stop the service and run Relay with backend-only credentials:
         brew services stop relay
         RELAY_WORK_POD_PROVIDER=sail SAIL_API_KEY="..." relay serve
+
+      Dashboard:
+        http://127.0.0.1:4317/demo/greptile
 
       Never put SAIL_API_KEY in a handoff, URL, browser field, or capsule.
     EOS
