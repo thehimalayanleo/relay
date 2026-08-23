@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { access, readFile } from "node:fs/promises";
+import { request as httpRequest } from "node:http";
 import path from "node:path";
 
 const server = (process.env.RELAY_SERVER ?? "http://127.0.0.1:4318").replace(/\/$/, "");
@@ -11,10 +12,23 @@ const repositoryName = process.env.RELAY_SESSION_REPO ?? "savepoint-demo";
 const repositoryPr = Number(process.env.RELAY_SESSION_PR ?? 0) || null;
 
 async function request(route, init = {}) {
-  const response = await fetch(`${server}${route}`, init);
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.message ?? `HTTP ${response.status}`);
-  return body;
+  const target = new URL(route, `${server}/`);
+  return new Promise((resolve, reject) => {
+    const outgoing = httpRequest(target, { method: init.method ?? "GET", headers: init.headers ?? {} }, (response) => {
+      const chunks = [];
+      response.on("data", (chunk) => chunks.push(chunk));
+      response.on("end", () => {
+        const text = Buffer.concat(chunks).toString("utf8");
+        let body = {};
+        try { body = text ? JSON.parse(text) : {}; } catch {}
+        if ((response.statusCode ?? 500) >= 400) reject(new Error(body.message ?? `HTTP ${response.statusCode}`));
+        else resolve(body);
+      });
+    });
+    outgoing.once("error", reject);
+    if (init.body) outgoing.write(init.body);
+    outgoing.end();
+  });
 }
 
 for (const relative of [
