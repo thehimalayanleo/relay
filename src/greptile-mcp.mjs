@@ -70,14 +70,14 @@ export class GreptileMcpClient {
     return this.callTool("list_pull_requests", { state: "open", limit });
   }
 
-  listGreptileComments(repository) {
+  listGreptileComments(repository, addressed = false) {
     return this.callTool("list_merge_request_comments", {
       name: repository.name,
       remote: repository.remote ?? "github",
       defaultBranch: repository.defaultBranch ?? "main",
       prNumber: repository.prNumber,
       greptileGenerated: true,
-      addressed: false,
+      addressed: Boolean(addressed),
     });
   }
 

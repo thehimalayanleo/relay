@@ -18,7 +18,9 @@ The current release is a local or trusted-network prototype. It has no user acco
 
 ## What works
 
-- Real-time shared product rooms with PM/SWE presence, synchronized briefs, and a common agent activity stream.
+- Persistent capability-scoped sessions with PM/SWE presence, synchronized briefs, and a common agent activity stream.
+- Browser-local recent-session switching, one-click PM invitations, and 72-hour capability expiry.
+- Session-specific Greptile timelines that distinguish closed, remaining, and unknown findings without crediting disappearance as resolution.
 - Claude-Mem adapter for retrieving cited session observations before Relay seals the transferable subset.
 - Serialized model-run queue shared by HTTP, CLI, JavaScript, OpenCode, and Google A2A entry points.
 - One-button web-app overlay with a copyable browser handoff link.
@@ -40,14 +42,16 @@ This is not a full environment checkpoint. It transfers CAMP and handoff context
 
 Open `http://127.0.0.1:4317/demo/greptile` after starting Relay Core.
 
-- Open `?role=pm` for Sanjana and `?role=swe` for Ajinkya. Changes to the product brief appear in both sessions without refreshing.
+- Ajinkya creates a session, selects a Greptile repository and PR, then copies the PM capability link for Sanjana.
+- Sanjana follows that link. Changes to the product brief appear in both browsers without refreshing.
+- Each browser remembers only the sessions whose capability links it has opened. The server exposes no global session list.
 - Both collaborators observe the same agent activity stream, while agent runs remain serialized and auditable.
 - A structured code-review finding and the human-agent investigation become typed operational memory.
 - Relay seals that memory with a SHA-256 digest in a local pod or real Sailbox.
 - User 2 restores the same memory set and issues an acceptance receipt bound to that digest.
 - The UI labels fixture input, local pods, and real Sailboxes distinctly.
 
-The live room synchronizes collaborative work state. It does not claim that two model processes execute concurrently. The demo also does not claim that Greptile is live unless an authenticated adapter supplied the finding, or claim token and resolution-time savings without the controlled evaluation described below.
+The live session synchronizes collaborative human work state. Model execution is serialized through one queue. Relay does not claim simultaneous shared-agent execution. The demo also does not claim that Greptile is live unless the authenticated MCP adapter supplied the finding, or claim token and resolution-time savings without the controlled evaluation described below.
 
 ## One repository
 
@@ -75,7 +79,7 @@ POST /v1/integrations/greptile/comments
 POST /v1/integrations/greptile/improve
 ```
 
-The comments request accepts `name`, `prNumber`, `remote`, and `defaultBranch`, then retrieves unresolved Greptile-generated comments. The browser never receives the API key. The deterministic presentation finding remains explicitly labeled even when the MCP connection is live.
+The comments request accepts `name`, `prNumber`, `remote`, and `defaultBranch`. Session sync retrieves both open and addressed Greptile-generated comments. Relay counts a finding as closed only when an ID first observed open later appears addressed. A missing ID becomes unknown. The browser never receives the API key.
 
 The improvement endpoint implements a bounded review loop for any active engineering investigation:
 
@@ -84,6 +88,23 @@ Greptile review -> Relay handoff -> human or agent patch -> Greptile re-review
 ```
 
 It stops when no unresolved Greptile comments remain or after a frozen maximum of five iterations. `triggerReview: true` explicitly asks Greptile to review; omitting it performs a read-only check and creates a verified Relay handoff only when action is required. Relay records the iteration budget and stop condition inside the handoff so an autonomous harness cannot recurse silently.
+
+### Shared-session API
+
+Session capabilities are returned once and kept in URL fragments plus each collaborator's browser-local recent list. Tokens are SHA-256 hashed in atomic `0600` records and are never returned by a server listing endpoint.
+
+```text
+POST /v1/sessions
+GET  /v1/sessions/:id
+POST /v1/sessions/:id/join
+POST /v1/sessions/:id/brief
+GET  /v1/sessions/:id/events
+POST /v1/sessions/:id/greptile/sync
+GET  /v1/sessions/:id/metrics
+POST /v1/sessions/:id/checkpoints
+```
+
+Regular calls use `Authorization: Bearer <capability>`. The SSE endpoint also accepts `?token=` because the browser `EventSource` API cannot set authorization headers. Relay does not log request URLs.
 
 ### Claude-Mem bridge
 
@@ -108,11 +129,11 @@ Public one-command CLI install:
 brew install thehimalayanleo/relay/relay
 ```
 
-The public tap lives at [thehimalayanleo/homebrew-relay](https://github.com/thehimalayanleo/homebrew-relay). No GitHub login or repository token is required. Then run `relay serve` and open `http://127.0.0.1:4317/demo/greptile?role=pm`.
+The public tap lives at [thehimalayanleo/homebrew-relay](https://github.com/thehimalayanleo/homebrew-relay). No GitHub login or repository token is required. Then run `relay serve`, open `http://127.0.0.1:4317/demo/greptile`, create a session, and send its **Invite PM** link to the collaborator.
 
 For optional backend integrations, run `relay configure` once. It prompts silently for Sail and Greptile keys and saves them locally with mode `0600`. Claude-Mem is auto-detected and remains optional.
 
-Two collaborators must point at the same Relay server. On a trusted Tailscale network, the host can run `relay serve --host 0.0.0.0`; collaborators then open the host's Tailscale address with `?role=pm` or `?role=swe`. Two independent localhost servers do not share a room.
+Two collaborators must point at the same Relay server. On a trusted Tailscale network, the host can run `relay serve --host 0.0.0.0`; the collaborator opens the generated capability link using the host's Tailscale address. Two independent localhost servers do not share a session.
 
 ```bash
 cd relay
@@ -216,11 +237,12 @@ The component renders a 54-pixel floating port over the host web app. Selecting 
 
 ## Work pods and Sailboxes
 
-Every handoff can attach a work pod. Both the local fallback and Sail provider write three sealed files:
+Every session checkpoint can attach a work pod. Both the local fallback and Sail provider write four sealed files:
 
 - `CAMP.json` for machine-readable state and lineage.
 - `HANDOFF.md` for a fresh agent or person.
 - `manifest.json` for lifecycle and provider metadata.
+- `SESSION.json` for the exact brief version, Claude-Mem observation IDs, Greptile provenance and metrics, activity summary, and checkpoint references.
 
 The receiver uses the same capability link to pull that pod context. This makes the demonstration `User 1 → Work Pod → User 2`, instead of pretending that a chat summary is a complete environment.
 

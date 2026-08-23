@@ -66,7 +66,8 @@ test("Sail provider writes, pauses, resumes, records agent output, and terminate
   });
   await provider.init();
   const id = randomUUID();
-  const metadata = await provider.create({ id, capsule, digest: "sha256:test" });
+  const sessionSnapshot = { id: "session-test", version: 4, claudeMem: { observationIds: ["obs-1"] } };
+  const metadata = await provider.create({ id, capsule, digest: "sha256:test", sessionSnapshot });
   assert.equal(metadata.provider, "sail");
   assert.equal(metadata.sailboxId, "sb_test");
   assert.equal(metadata.state, "paused");
@@ -77,6 +78,7 @@ test("Sail provider writes, pauses, resumes, records agent output, and terminate
   assert.equal(fake.box.status, "running");
   assert.equal(pulled.camp.digest, "sha256:test");
   assert.match(pulled.handoff, /Sail transfer/);
+  assert.deepEqual(pulled.session, sessionSnapshot);
 
   const updated = await provider.storeAgentResult(metadata, { id: "run-1", stdout: "ok" });
   assert.match(updated.files.at(-1), /^agents\//);

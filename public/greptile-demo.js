@@ -1,448 +1,97 @@
 const byId = (id) => document.getElementById(id);
-let transfer;
-let agentAvailable = false;
-let contextDrop = null;
-let currentArcRun = null;
-let claudeMemContext = null;
+const RECENTS_KEY = "relay.sessions.v1";
+let active, snapshot, stream, transfer, editTimer, claudeMemContext, syncTimer, lastMemoryKey, presenceTimer;
 let claudeMemReady = false;
-let lastMemoryQuery = "";
-let memorySyncTimer;
-byId("truth").setAttribute("aria-live", "polite");
-byId("provider").setAttribute("aria-live", "polite");
-byId("agent").title = "Seal Agent 1's checkpoint first.";
-byId("resume").title = "Seal Agent 1's checkpoint first.";
-const memoryButton = document.createElement("button");
-memoryButton.id = "memory";
-memoryButton.textContent = "Pull Claude-Mem context";
-document.querySelector(".controls").prepend(memoryButton);
 
-document.querySelector(".run-card strong").textContent = "Relay product room";
-document.querySelector(".run-card p").textContent = "Sanjana shapes the product. Ajinkya implements. The agent follows one shared brief.";
-const workspaceVisual = document.createElement("div");
-workspaceVisual.style.cssText = "margin:0 12px 12px;padding:12px;border:1px solid var(--line);border-radius:8px;background:#101112";
-workspaceVisual.innerHTML = '<div style="display:flex;justify-content:space-between;margin-bottom:10px"><strong>Shared compute</strong><span id="workspace-mode" style="color:var(--muted);font-size:10px">Checking provider</span></div><div style="display:grid;grid-template-columns:1fr 28px 1fr;align-items:center;text-align:center"><div style="padding:10px 4px;border:1px solid var(--line);border-radius:6px"><span style="color:var(--orange)">▣</span><strong style="display:block">Box A</strong><small id="box-a-state" style="color:var(--muted)">User 1</small></div><span style="color:var(--orange)">→</span><div style="padding:10px 4px;border:1px solid var(--line);border-radius:6px"><span style="color:var(--orange)">▣</span><strong style="display:block">Box B</strong><small id="box-b-state" style="color:var(--muted)">User 2</small></div></div>';
-document.querySelector(".mission").after(workspaceVisual);
+const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[c]));
+async function json(response) { const body = await response.json(); if (!response.ok) throw new Error(body.message ?? body.error ?? `HTTP ${response.status}`); return body; }
+const authHeaders = (extra = {}) => ({ authorization: `Bearer ${active.token}`, ...extra });
+function hashSession() { const p = new URLSearchParams(location.hash.slice(1)); return p.get("session") && p.get("token") ? { id: p.get("session"), token: p.get("token"), role: p.get("role") === "pm" ? "pm" : "swe" } : null; }
+function person(role = active?.role ?? "swe") { return role === "pm" ? { id: `sanjana-pm-${active.id}`, name: "Sanjana", role: "Product Manager", color: "#ff5a1f" } : { id: `ajinkya-swe-${active.id}`, name: "Ajinkya", role: "SWE", color: "#7aa2f7" }; }
+function recents() { try { return JSON.parse(localStorage.getItem(RECENTS_KEY) ?? "[]"); } catch { return []; } }
+function saveRecent() { const item = { ...active, title: snapshot.title, lastOpenedAt: new Date().toISOString() }; localStorage.setItem(RECENTS_KEY, JSON.stringify([item, ...recents().filter((e) => e.id !== item.id)].slice(0, 12))); renderSwitcher(); }
+const setStatus = (message) => { byId("truth").textContent = message; };
+function addLog(text, kind = "ok") { const line = document.createElement("div"); line.className = `log-line ${kind}`; line.innerHTML = `<time>${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time><span>${escapeHtml(text)}</span>`; byId("log").append(line); byId("log").scrollTop = byId("log").scrollHeight; }
 
-const roomId = "relay-product";
-const roleParam = new URLSearchParams(location.search).get("role") === "pm" ? "pm" : "swe";
-const me = roleParam === "pm"
-  ? { id: "sanjana-pm", name: "Sanjana", role: "Product Manager", color: "#ff5a1f" }
-  : { id: "ajinkya-swe", name: "Ajinkya", role: "SWE", color: "#7aa2f7" };
+const controls = document.createElement("div");
+controls.className = "session-controls";
+controls.innerHTML = '<select id="session-switch" aria-label="Recent Relay sessions"></select><button id="new-session">New session</button><button id="invite-session">Invite PM</button><button id="preview-session">Preview as Sanjana</button>';
+document.querySelector(".topbar").insertBefore(controls, document.querySelector(".runstate"));
+const modal = document.createElement("dialog");
+modal.innerHTML = '<form id="session-form"><div class="sheet-head"><strong>New Relay session</strong><button type="button" id="close-sheet" aria-label="Close">×</button></div><label>What are you shipping?<input id="session-title" maxlength="200" required placeholder="Fix checkout retries without rediscovery"></label><label>Greptile-indexed repository<input id="session-repo" required placeholder="owner/repository"></label><label>Open pull request<input id="session-pr" required type="number" min="1" placeholder="42"></label><button id="create-session" class="primary">Create shared session</button><p id="session-error"></p></form>';
+document.body.append(modal);
+const style = document.createElement("style");
+style.textContent = `.session-controls{display:flex;gap:6px;align-items:center;margin-left:auto;margin-right:16px}.session-controls select,.session-controls button{height:30px;border:1px solid #353638;background:#18191a;color:#dedede;border-radius:6px;padding:0 10px;font:600 11px Inter,sans-serif}.session-controls button:first-of-type{background:var(--orange);border-color:var(--orange);color:#111}dialog{border:1px solid #3c3d3f;border-radius:12px;background:#151617;color:#eee;width:min(430px,calc(100vw - 32px));padding:0;box-shadow:0 24px 90px #000b}dialog::backdrop{background:#080808b8;backdrop-filter:blur(4px)}#session-form{padding:20px;display:grid;gap:15px}.sheet-head{display:flex;justify-content:space-between;align-items:center;font-size:18px}.sheet-head button{border:0;background:none;color:#aaa;font-size:24px}#session-form label{display:grid;gap:6px;color:#aaa;font-size:11px;text-transform:uppercase;letter-spacing:.08em}#session-form input{height:40px;border:1px solid #393a3c;background:#0f1011;color:#eee;border-radius:7px;padding:0 11px;font:14px Inter,sans-serif}#session-form .primary{height:44px;border:0;border-radius:7px;background:var(--orange);font-weight:800}#session-error{min-height:16px;color:#ff876f;margin:0}.metric-plot{height:116px;display:flex;align-items:flex-end;gap:7px;padding:12px 12px 4px}.metric-sample{flex:1;min-width:6px;display:grid;grid-template-columns:1fr 1fr;gap:2px;align-items:end;height:100%}.metric-sample i{display:block;min-height:2px;background:var(--orange);border-radius:2px 2px 0 0}.metric-sample i.remaining{background:#55585e}.finding-list{max-height:104px;overflow:auto;font-size:10px;color:#aaa;padding:0 12px}.finding-list a{color:#ddd;text-decoration:none}.finding-list div{padding:5px 0;border-top:1px solid #2a2b2d}.finding-list b{color:var(--orange);margin-right:6px}.memory-pill{color:var(--green);font-size:10px}.editor pre{white-space:pre-wrap}@media(max-width:960px){.shell{grid-template-columns:1fr}.sidebar,.editor{display:none}.inspector{display:block}.session-controls select,#preview-session{display:none}}`;
+document.head.append(style);
+
 const liveRoom = byId("live-room");
-liveRoom.innerHTML = `<div class="live-head"><strong>One shared brief</strong><small><span class="pulse"></span>SYNCED</small></div><div class="presence" id="presence"></div><div class="live-fields"><label>Customer problem<textarea data-field="problem"></textarea></label><label>PM constraint<textarea data-field="constraint"></textarea></label><label>Acceptance criteria<textarea data-field="acceptance"></textarea></label><label>Implementation<textarea data-field="implementation"></textarea></label></div><div class="live-foot"><span id="room-role">You are ${me.name} · ${me.role}</span><span id="room-version">v0</span></div>`;
-const memoryState = document.createElement("span");
-memoryState.id = "memory-state";
-memoryState.textContent = "Claude-Mem · connecting";
-memoryState.style.color = "var(--muted)";
-liveRoom.querySelector(".live-head").append(memoryState);
-let roomSnapshot;
-let liveTimer;
+liveRoom.innerHTML = '<div class="live-head"><strong>One shared brief</strong><small><span class="pulse"></span>LIVE</small><span id="memory-state" class="memory-pill">Claude-Mem · checking</span></div><div class="presence" id="presence"></div><div class="live-fields"><label>Customer problem<textarea data-field="problem"></textarea></label><label>PM constraint<textarea data-field="constraint"></textarea></label><label>Acceptance criteria<textarea data-field="acceptance"></textarea></label><label>Next implementation step<textarea data-field="implementation"></textarea></label></div><div class="live-foot"><span id="room-role"></span><span id="room-version">v0</span></div>';
+document.querySelector(".plot").innerHTML = '<div class="plot-title"><strong>Greptile findings closed</strong><span class="legend"><i class="key"></i> Closed <i class="key blocked"></i> Remaining</span></div><div id="metric-plot" class="metric-plot"></div><div id="finding-list" class="finding-list"></div>';
+document.querySelector(".run-card strong").textContent = "Shared agent workspace";
+document.querySelector(".run-card p").textContent = "One brief. Two collaborators. One serialized agent queue.";
+document.querySelector(".sidehead").textContent = "Session evidence";
+document.querySelectorAll(".file").forEach((file, i) => { file.textContent = ["shared-brief.md", "greptile-findings.json", "claude-mem.refs", "agent-queue.log", "checkpoints/", "SESSION.json", "CAMP.json", "HANDOFF.md"][i] ?? file.textContent; });
+document.querySelector(".editor pre").textContent = "Relay is waiting for a shared session.\n\nCreate one, invite your PM, and work from the same live brief.";
+[["bug-count", "Findings closed"], ["test-count", "Remaining"], ["action-count", "Brief version"], ["budget-count", "Checkpoints"]].forEach(([id, label]) => { byId(id).nextElementSibling.textContent = label; });
+byId("log").innerHTML = '<div class="log-line"><time>now</time><span>Create or join a session to begin the shared timeline.</span></div>';
+byId("relay").textContent = "Seal checkpoint"; byId("agent").textContent = "Run next action"; byId("resume").textContent = "Open checkpoint"; byId("review").textContent = "Sync Greptile";
 
-function renderRoom(snapshot) {
-  roomSnapshot = snapshot;
-  byId("room-version").textContent = `v${snapshot.version}`;
-  byId("presence").innerHTML = snapshot.participants.map((person) => `<div class="avatar" style="background:${person.color};${person.activeField ? `box-shadow:0 0 0 2px #101112,0 0 0 3px ${person.color}` : ""}" title="${person.name} · ${person.role}">${person.name[0]}</div><span>${person.name}${person.activeField ? ` is editing ${person.activeField}…` : ` · ${person.role}`}</span>`).join("");
-  for (const textarea of liveRoom.querySelectorAll("textarea")) {
-    if (document.activeElement !== textarea) textarea.value = snapshot.brief[textarea.dataset.field] ?? "";
-  }
-  const latest = snapshot.activity.at(-1);
-  if (latest && !byId("log").dataset.lastLiveEvent?.includes(latest.id)) {
-    byId("log").dataset.lastLiveEvent = latest.id;
-    addLog(`${latest.actor} ${latest.detail} · shared v${latest.version}`);
-  }
-  clearTimeout(memorySyncTimer);
-  memorySyncTimer = setTimeout(() => syncClaudeMemory({ silent: true }), 700);
+function renderSwitcher() { const select = byId("session-switch"); const list = recents(); select.innerHTML = list.length ? list.map((e) => `<option value="${escapeHtml(e.id)}" ${e.id === active?.id ? "selected" : ""}>${escapeHtml(e.title)}</option>`).join("") : '<option>No recent sessions</option>'; }
+function renderMetrics(g = snapshot?.greptile) {
+  const samples = g?.samples ?? [], findings = Object.values(g?.findings ?? {}), latest = samples.at(-1) ?? { closed: 0, remaining: findings.filter((x) => x.state === "open").length, unknown: 0 };
+  byId("bug-count").textContent = latest.closed ?? 0; byId("test-count").textContent = latest.remaining ?? 0;
+  const max = Math.max(1, ...samples.flatMap((s) => [s.closed, s.remaining]));
+  byId("metric-plot").innerHTML = samples.length ? samples.map((s) => `<span class="metric-sample" title="Review ${s.iteration}: ${s.closed} closed, ${s.remaining} remaining, ${s.unknown} unknown"><i style="height:${Math.max(2, s.closed / max * 100)}%"></i><i class="remaining" style="height:${Math.max(2, s.remaining / max * 100)}%"></i></span>`).join("") : '<span style="color:#777;font-size:11px;align-self:center">Sync Greptile to begin this session’s timeline.</span>';
+  byId("finding-list").innerHTML = findings.map((f) => `<div><b>${escapeHtml(f.state)}</b>${f.url ? `<a href="${escapeHtml(f.url)}" target="_blank">${escapeHtml(f.id)}</a>` : escapeHtml(f.id)} ${escapeHtml(f.path)}${f.closedAt ? ` · closed ${new Date(f.closedAt).toLocaleTimeString()}` : ""}</div>`).join("");
 }
-
-async function joinRoom() {
-  renderRoom(await json(await fetch(`/v1/rooms/${roomId}/join`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(me) })));
+function render(next) {
+  const oldEvent = snapshot?.activity?.at(-1)?.id; snapshot = next;
+  byId("room-version").textContent = `v${next.version}`; byId("action-count").textContent = next.version; byId("budget-count").textContent = next.checkpoints.length; byId("room-role").textContent = `You are ${person().name} · ${person().role}`;
+  byId("presence").innerHTML = next.participants.map((p) => `<div class="avatar" style="background:${escapeHtml(p.color)}">${escapeHtml(p.name[0])}</div><span>${escapeHtml(p.name)}${p.activeField ? ` is editing ${escapeHtml(p.activeField)}…` : ` · ${escapeHtml(p.role)}`}</span>`).join("");
+  for (const area of liveRoom.querySelectorAll("textarea")) if (document.activeElement !== area) area.value = next.brief[area.dataset.field] ?? "";
+  document.querySelector(".editor pre").textContent = `# ${next.title}\n\nRepository: ${next.repository.name}\nPull request: #${next.repository.prNumber}\nShared brief: v${next.version}\n\nProblem\n${next.brief.problem}\n\nNext action\n${next.brief.implementation}\n\nAgent execution: serialized`;
+  document.querySelector(".run-card strong").textContent = next.title; document.querySelector(".run-card p").textContent = `${next.repository.name} · PR #${next.repository.prNumber}`; renderMetrics();
+  const latest = next.activity.at(-1); if (latest && latest.id !== oldEvent) addLog(`${latest.actor} ${latest.detail} · v${latest.version}`);
+  saveRecent(); clearTimeout(syncTimer); syncTimer = setTimeout(() => recallMemory(true), 1000);
 }
-
-for (const textarea of liveRoom.querySelectorAll("textarea")) {
-  textarea.addEventListener("input", () => {
-    clearTimeout(liveTimer);
-    liveTimer = setTimeout(async () => {
-      renderRoom(await json(await fetch(`/v1/rooms/${roomId}/brief`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ actor: me.name, actorId: me.id, field: textarea.dataset.field, value: textarea.value }) })));
-    }, 45);
-  });
+async function connectSession(session) {
+  stream?.close(); clearInterval(presenceTimer); active = session;
+  render(await json(await fetch(`/v1/sessions/${session.id}`, { headers: authHeaders() })));
+  await json(await fetch(`/v1/sessions/${session.id}/join`, { method: "POST", headers: authHeaders({ "content-type": "application/json" }), body: JSON.stringify(person()) }));
+  presenceTimer = setInterval(() => fetch(`/v1/sessions/${active.id}/join`, { method: "POST", headers: authHeaders({ "content-type": "application/json" }), body: JSON.stringify(person()) }).catch(() => {}), 15_000);
+  stream = new EventSource(`/v1/sessions/${session.id}/events?token=${encodeURIComponent(session.token)}`);
+  for (const name of ["workspace", "presence", "activity", "memory", "checkpoint", "greptile", "agent-queue"]) stream.addEventListener(name, (event) => render(JSON.parse(event.data)));
+  stream.onerror = () => { byId("room-version").textContent = "reconnecting"; };
+  setStatus(`Joined ${snapshot.title}. Share one capability link to collaborate.`);
 }
+for (const area of liveRoom.querySelectorAll("textarea")) area.addEventListener("input", () => { clearTimeout(editTimer); editTimer = setTimeout(async () => { try { render(await json(await fetch(`/v1/sessions/${active.id}/brief`, { method: "POST", headers: authHeaders({ "content-type": "application/json" }), body: JSON.stringify({ ...person(), actor: person().name, actorId: person().id, field: area.dataset.field, value: area.value }) }))); } catch (e) { setStatus(e.message); } }, 80); });
 
-const roomEvents = new EventSource(`/v1/rooms/${roomId}/events`);
-for (const eventName of ["workspace", "presence", "activity"]) roomEvents.addEventListener(eventName, (event) => renderRoom(JSON.parse(event.data)));
-roomEvents.onerror = () => { byId("room-version").textContent = "reconnecting"; };
-joinRoom();
-
-const scenario = {
-  finding: {
-    id: "relay-live-collaboration-001",
-    repository: "thehimalayanleo/relay",
-    prUrl: "https://github.com/thehimalayanleo/relay",
-    sha: "03583c5",
-    summary: "PM and SWE context lived in separate agent sessions, forcing decisions to be restated.",
-    severity: "medium",
-    confidence: "high",
-    paths: ["src/collaboration.mjs", "public/greptile-demo.js"],
-    evidence: ["Two browser sessions now synchronize one versioned product brief through Relay."],
-  },
-  investigation: {
-    completed: ["Defined PM and SWE roles", "Added presence and synchronized product notes", "Preserved durable checkpoints"],
-    constraints: ["Keep Relay one-button, visual, and free of jargon-heavy forms"],
-    rejectedApproaches: ["Use two disconnected agent chats and manually copy context"],
-    nextAction: "Implement and test the task currently specified in the shared product brief.",
-  },
-  acceptanceCriteria: ["Both users see edits without refreshing", "Agent activity is visible to both roles", "A durable Relay checkpoint can still be sealed"],
-};
-
-async function recordRoomActivity(type, detail, actor = me.name) {
-  return json(await fetch(`/v1/rooms/${roomId}/activity`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ type, detail, actor }),
-  }));
-}
-
-async function json(response) {
-  const body = await response.json();
-  if (!response.ok) throw new Error(body.message ?? body.error ?? `HTTP ${response.status}`);
-  return body;
-}
-
-function addLog(text, kind = "ok") {
-  const line = document.createElement("div");
-  line.className = `log-line ${kind}`;
-  const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  line.innerHTML = `<time>${now}</time><span>${text}</span>`;
-  byId("log").append(line);
-  byId("log").scrollTop = byId("log").scrollHeight;
-}
-
-async function health() {
+async function recallMemory(silent = false) {
+  if (!claudeMemReady || !snapshot) return;
+  const memoryKey = `${snapshot.brief.problem}\n${snapshot.brief.implementation}`;
+  if (silent && memoryKey === lastMemoryKey) return;
+  lastMemoryKey = memoryKey;
+  byId("memory-state").textContent = "Claude-Mem · recalling";
   try {
-    const value = await json(await fetch("/health"));
-    agentAvailable = Boolean(value.autonomousAgent?.configured);
-    byId("provider").textContent = value.ok ? "Live" : "Offline";
-    const sail = value.workPod?.provider === "sail";
-    byId("relay").textContent = sail ? "Seal and send to Sail" : "Seal to local Relay workspace";
-    byId("workspace-mode").textContent = sail ? `Sail · ${value.workPod.appName}` : "Local fallback · Sail SDK pending";
-    byId("box-a-state").textContent = sail ? "Sailbox · paused" : "Local pod · ready";
-    byId("box-b-state").textContent = sail ? "Sailbox · on demand" : "Local pod · on demand";
-    byId("agent").disabled = !agentAvailable;
-    const [greptileResult, memoryResult] = await Promise.allSettled([
-      json(await fetch("/v1/integrations/greptile/status")),
-      json(await fetch("/v1/integrations/claude-mem/status")),
-    ]);
-    const live = greptileResult.status === "fulfilled" ? greptileResult.value : { liveApiConnected: false };
-    const memory = memoryResult.status === "fulfilled" ? memoryResult.value : { connected: false };
-    byId("greptile-state").textContent = live.liveApiConnected ? "Greptile: connected" : "Greptile: optional";
-    claudeMemReady = memory.connected;
-    memoryButton.textContent = memory.connected ? `Claude-Mem ${memory.version} · pull context` : "Claude-Mem offline";
-    memoryButton.disabled = !memory.connected;
-    memoryState.textContent = memory.connected ? `Claude-Mem ${memory.version} · listening` : "Claude-Mem · optional";
-    memoryState.style.color = memory.connected ? "var(--green)" : "var(--muted)";
-    if (memory.connected) syncClaudeMemory({ silent: true });
-    byId("truth").textContent = `Relay: live · Claude-Mem: ${memory.connected ? "ready" : "optional"} · Workspace: ${sail ? "Sail" : "local"} · Greptile: ${live.liveApiConnected ? "connected" : "optional"}`;
-  } catch (error) {
-    byId("provider").textContent = "Offline";
-    byId("truth").textContent = error.message;
-  }
+    claudeMemContext = await json(await fetch("/v1/integrations/claude-mem/search", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ query: memoryKey.replace("\n", " "), project: "relay", limit: 8 }) }));
+    const newIds = claudeMemContext.observationIds.filter((id) => !snapshot.claudeMem.observationIds.includes(String(id)));
+    if (newIds.length) await json(await fetch(`/v1/sessions/${active.id}/memory`, { method: "POST", headers: authHeaders({ "content-type": "application/json" }), body: JSON.stringify({ observationIds: newIds }) }));
+    byId("memory-state").textContent = claudeMemContext.observationIds.length ? `Claude-Mem · ${claudeMemContext.observationIds.length} recalled` : "Claude-Mem · listening";
+    if (!silent) setStatus(`Claude-Mem supplied ${claudeMemContext.observationIds.length} cited observations.`);
+  } catch { byId("memory-state").textContent = "Claude-Mem · optional"; }
 }
+async function health() { try { const [server, memory] = await Promise.all([json(await fetch("/health")), json(await fetch("/v1/integrations/claude-mem/status")).catch(() => ({ connected: false }))]); byId("provider").textContent = "Live"; claudeMemReady = memory.connected; byId("memory-state").textContent = memory.connected ? `Claude-Mem ${memory.version} · silent` : "Claude-Mem · optional"; byId("greptile-state").textContent = "Greptile: session-scoped"; setStatus(`Relay live · ${server.workPod.provider === "sail" ? "Sail checkpoints" : "local checkpoints"} · one serialized agent queue`); } catch (e) { byId("provider").textContent = "Offline"; setStatus(e.message); } }
 
-async function loadBugLedger() {
-  try {
-    const ledger = await json(await fetch("/bug-ledger.json"));
-    const resolved = ledger.findings.filter((item) => item.status === "resolved").length;
-    const blocked = ledger.findings.filter((item) => item.status === "blocked").length;
-    byId("bug-count").textContent = String(resolved);
-    byId("test-count").textContent = `${resolved + 3} / ${resolved + 3}`;
-    byId("resolved-bar").style.height = `${Math.min(100, resolved * 33)}%`;
-    byId("blocked-bar").style.height = `${Math.min(100, blocked * 33)}%`;
-    for (const item of ledger.findings.slice(1)) {
-      if (!byId("log").textContent.includes(item.id)) addLog(`${item.id} · ${item.summary}`, item.status === "resolved" ? "ok" : "warn");
-    }
-  } catch (error) {
-    addLog(`Evidence ledger unavailable · ${error.message}`, "warn");
-  }
-}
+byId("new-session").addEventListener("click", () => modal.showModal()); byId("close-sheet").addEventListener("click", () => modal.close());
+byId("session-form").addEventListener("submit", async (event) => { event.preventDefault(); byId("create-session").disabled = true; try { const created = await json(await fetch("/v1/sessions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ title: byId("session-title").value, creatorRole: "swe", repository: { name: byId("session-repo").value, prNumber: Number(byId("session-pr").value), remote: "github", defaultBranch: "main" } }) })); history.replaceState(null, "", new URL(created.creatorUrl).hash); modal.close(); await connectSession(hashSession()); } catch (e) { byId("session-error").textContent = e.message; } finally { byId("create-session").disabled = false; } });
+byId("session-switch").addEventListener("change", async (event) => { const selected = recents().find((e) => e.id === event.target.value); if (!selected) return; history.replaceState(null, "", `#session=${encodeURIComponent(selected.id)}&token=${encodeURIComponent(selected.token)}&role=${selected.role}`); await connectSession(selected); });
+byId("invite-session").addEventListener("click", async () => { const link = `${location.origin}${location.pathname}#session=${encodeURIComponent(active.id)}&token=${encodeURIComponent(active.token)}&role=pm`; await navigator.clipboard.writeText(link); setStatus("PM capability link copied. It expires with this session."); });
+byId("preview-session").addEventListener("click", () => window.open(`${location.origin}${location.pathname}#session=${encodeURIComponent(active.id)}&token=${encodeURIComponent(active.token)}&role=pm`, "relay-pm-preview"));
+byId("review").addEventListener("click", async () => { byId("review").disabled = true; setStatus("Syncing this PR’s Greptile findings…"); try { const m = await json(await fetch(`/v1/sessions/${active.id}/greptile/sync`, { method: "POST", headers: authHeaders() })); setStatus(`${m.totals.closed} findings closed, ${m.totals.remaining} remaining, ${m.totals.unknown} unknown.`); } catch (e) { setStatus(`Greptile sync unavailable: ${e.message}`); addLog(e.message, "warn"); } finally { byId("review").disabled = false; } });
+byId("relay").addEventListener("click", async () => { byId("relay").disabled = true; setStatus("Sealing the live session into a durable checkpoint…"); try { transfer = await json(await fetch(`/v1/sessions/${active.id}/checkpoints`, { method: "POST", headers: authHeaders({ "content-type": "application/json" }), body: JSON.stringify({ actor: person().name, claudeMemObservationIds: claudeMemContext?.observationIds ?? [] }) })); byId("agent").disabled = false; byId("resume").disabled = false; setStatus(`Checkpoint v${transfer.version} sealed to ${transfer.provider}.`); } catch (e) { setStatus(e.message); } finally { byId("relay").disabled = false; } });
+byId("agent").addEventListener("click", async () => { if (!transfer) return setStatus("Seal a checkpoint first."); byId("agent").disabled = true; setStatus("The shared agent queue is running one next action…"); try { const result = await json(await fetch(`/v1/relays/${transfer.id}/agent/run`, { method: "POST", headers: { authorization: `Bearer ${transfer.relayToken}`, "content-type": "application/json" }, body: JSON.stringify({ target: "opencode", requestedBy: person().name, demo: true }) })); await json(await fetch(`/v1/sessions/${active.id}/activity`, { method: "POST", headers: authHeaders({ "content-type": "application/json" }), body: JSON.stringify({ type: "agent", actor: "Relay agent", detail: result.status }) })); setStatus(`Serialized agent run ${result.status}.`); } catch (e) { setStatus(e.message); } finally { byId("agent").disabled = false; } });
+byId("resume").addEventListener("click", () => { if (transfer) window.open(transfer.shareUrl, "_blank"); });
+for (const tab of document.querySelectorAll(".bottom-tabs span")) { tab.style.cursor = "pointer"; tab.addEventListener("click", () => byId("review").click()); }
+window.addEventListener("hashchange", () => { const next = hashSession(); if (next && next.id !== active?.id) connectSession(next).catch((e) => setStatus(e.message)); });
 
-async function loadArcRun() {
-  try {
-    const run = await json(await fetch("/v1/demo/arc-run"));
-    currentArcRun = run;
-    byId("action-count").textContent = String(run.actions.length);
-    byId("budget-count").textContent = String(run.action_budget - run.actions.length);
-    document.querySelector(".run-card strong").textContent = `Episode ${run.run_id.slice(0, 8).toUpperCase()}`;
-    document.querySelector(".run-card p").textContent = run.status === "completed"
-      ? `Completed across two processes in ${run.actions.length} total actions.`
-      : `${run.actions.length} actions completed. ${run.action_budget - run.actions.length} remain.`;
-    document.querySelectorAll(".memory-item p")[0].textContent = run.memory.hypothesis;
-    document.querySelectorAll(".memory-item p")[1].textContent = `${run.memory.confirmed.length} confirmed findings carried across the handoff.`;
-    document.querySelectorAll(".memory-item p")[2].textContent = run.memory.next_probe;
-    byId("truth").textContent = `${run.status.toUpperCase()} · ${run.observations.at(-1).state} · ${run.claimBoundary}`;
-    addLog(`Live episode ${run.status} · ${run.observations.at(-1).state} · ${run.actions.length} actions`);
-  } catch (error) {
-    addLog(`ARC run artifact unavailable · ${error.message}`, "warn");
-  }
-}
-
-const editorSurface = document.querySelector(".editor pre");
-const coreSource = editorSurface.innerHTML;
-const editorTabs = [...document.querySelectorAll(".tabs .tab")];
-function selectEditorTab(tab) {
-  editorTabs.forEach((item) => item.classList.toggle("active", item === tab));
-  if (tab.textContent.includes("episode.json")) {
-    editorSurface.textContent = currentArcRun
-      ? JSON.stringify(currentArcRun, null, 2)
-      : "Run artifact is still loading.";
-  } else {
-    editorSurface.innerHTML = coreSource;
-  }
-  byId("truth").textContent = `Opened ${tab.textContent.replace("●", "").trim()}.`;
-}
-for (const tab of editorTabs) {
-  tab.setAttribute("role", "button");
-  tab.tabIndex = 0;
-  tab.style.cursor = "pointer";
-  tab.addEventListener("click", () => selectEditorTab(tab));
-  tab.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") selectEditorTab(tab); });
-}
-
-for (const file of document.querySelectorAll(".file")) {
-  file.setAttribute("role", "button");
-  file.tabIndex = 0;
-  file.style.cursor = "pointer";
-  const openFile = () => {
-    document.querySelectorAll(".file").forEach((item) => item.classList.remove("active"));
-    file.classList.add("active");
-    const name = file.textContent.trim();
-    if (name.includes("episode.json")) selectEditorTab(editorTabs[1]);
-    else if (name.includes("core.py")) selectEditorTab(editorTabs[0]);
-    else {
-      editorSurface.textContent = `${name}\n\nAvailable in the private relay-arc-agi-3 repository.`;
-      byId("truth").textContent = `Selected ${name}.`;
-    }
-  };
-  file.addEventListener("click", openFile);
-  file.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") openFile(); });
-}
-
-const dropZone = document.createElement("div");
-dropZone.id = "drop-zone";
-dropZone.tabIndex = 0;
-dropZone.innerHTML = '<strong>Drop context here</strong><span id="drop-copy">Logs, Markdown, JSON, or text · 20 KB max</span><input id="context-file" type="file" accept=".txt,.md,.json,.log,text/plain,application/json" hidden>';
-dropZone.style.cssText = "margin:12px;padding:16px;border:1px dashed #55585e;border-radius:8px;text-align:center;color:var(--muted);background:#171819;cursor:pointer";
-dropZone.querySelector("strong").style.cssText = "display:block;color:var(--text);margin-bottom:3px";
-document.querySelector(".controls").before(dropZone);
-const picker = byId("context-file");
-
-async function loadContextFile(file) {
-  const allowed = /^(text\/|application\/json)/.test(file.type) || /\.(txt|md|json|log)$/i.test(file.name);
-  if (!allowed) throw new Error("Use a text, Markdown, JSON, or log file.");
-  if (file.size > 20_000) throw new Error("Context drops are limited to 20 KB.");
-  contextDrop = { name: file.name, mediaType: file.type || "text/plain", content: await file.text() };
-  byId("drop-copy").textContent = `${file.name} · ${(file.size / 1024).toFixed(1)} KB · ready to send`;
-  dropZone.style.borderColor = "var(--orange)";
-  addLog(`Context drop staged · ${file.name}`);
-}
-
-dropZone.addEventListener("click", () => picker.click());
-dropZone.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") picker.click(); });
-dropZone.addEventListener("dragover", (event) => { event.preventDefault(); dropZone.style.borderColor = "var(--orange)"; });
-dropZone.addEventListener("dragleave", () => { if (!contextDrop) dropZone.style.borderColor = "#55585e"; });
-dropZone.addEventListener("drop", async (event) => {
-  event.preventDefault();
-  try { await loadContextFile(event.dataTransfer.files[0]); } catch (error) { byId("truth").textContent = error.message; }
-});
-picker.addEventListener("change", async () => {
-  try { await loadContextFile(picker.files[0]); } catch (error) { byId("truth").textContent = error.message; }
-});
-
-byId("relay").addEventListener("click", async () => {
-  byId("relay").disabled = true;
-  byId("truth").textContent = "Sealing the useful episode state…";
-  try {
-    const liveScenario = {
-      ...scenario,
-      investigation: {
-        ...scenario.investigation,
-        constraints: [roomSnapshot?.brief.constraint ?? scenario.investigation.constraints[0]],
-        nextAction: roomSnapshot?.brief.implementation ?? scenario.investigation.nextAction,
-      },
-      acceptanceCriteria: [roomSnapshot?.brief.acceptance ?? scenario.acceptanceCriteria[0]],
-    };
-    const transferableContext = [contextDrop?.content, claudeMemContext?.text].filter(Boolean).join("\n\n");
-    const combinedDrop = transferableContext ? {
-      name: "relay-context.md",
-      mediaType: "text/markdown",
-      content: transferableContext,
-      claudeMemObservationIds: claudeMemContext?.observationIds ?? [],
-    } : null;
-    transfer = await json(await fetch("/v1/integrations/greptile/handoffs", {
-      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...liveScenario, contextDrop: combinedDrop }),
-    }));
-    await recordRoomActivity("checkpoint", `sealed shared brief v${roomSnapshot?.version ?? 0}`, me.name);
-    byId("resume").disabled = false;
-    byId("resume").title = "Resume the shared episode as User 2.";
-    byId("agent").disabled = !agentAvailable;
-    byId("agent").title = agentAvailable ? "Continue the shared episode with Ox Alpha." : "Ox Alpha is unavailable.";
-    const remote = transfer.workPod.provider === "sail";
-    byId("workspace-mode").textContent = remote ? `Sail · ${transfer.workPod.appName}` : "Local fallback";
-    byId("box-a-state").textContent = `${remote ? "Sailbox" : "Local pod"} · ${transfer.workPod.state}`;
-    byId("box-b-state").textContent = remote ? `On demand · ${transfer.workPod.sailboxId.slice(0, 8)}` : `On demand · ${transfer.workPod.id.slice(0, 8)}`;
-    byId("truth").textContent = `Shared brief v${roomSnapshot?.version ?? 0} sealed as a durable Relay checkpoint.`;
-    addLog(`Checkpoint sealed · ${transfer.integration.memories} useful memories carried`);
-  } catch (error) {
-    byId("truth").textContent = error.message;
-    byId("relay").disabled = false;
-  }
-});
-
-async function syncClaudeMemory({ silent = false, force = false } = {}) {
-  if (!claudeMemReady || !roomSnapshot) return;
-  const query = [roomSnapshot.brief.problem, roomSnapshot.brief.implementation].filter(Boolean).join(" ");
-  if (!force && query === lastMemoryQuery) return;
-  lastMemoryQuery = query;
-  if (!silent) memoryButton.disabled = true;
-  memoryButton.textContent = "Claude-Mem · recalling…";
-  memoryState.textContent = "Claude-Mem · recalling";
-  try {
-    claudeMemContext = await json(await fetch("/v1/integrations/claude-mem/search", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ query, project: "relay", limit: 8 }),
-    }));
-    const count = claudeMemContext.observationIds.length;
-    memoryButton.textContent = count ? `Claude-Mem · ${count} memories ready` : "Claude-Mem · listening";
-    memoryState.textContent = count ? `Claude-Mem · ${count} recalled` : "Claude-Mem · listening";
-    if (!silent) byId("truth").textContent = count
-      ? `Claude-Mem supplied ${count} cited observations. Relay will seal and transfer them.`
-      : "Claude-Mem is connected and will supply memory when relevant observations appear.";
-    await recordRoomActivity("memory", count ? `attached ${count} Claude-Mem observations` : "checked Claude-Mem; no prior Relay observations", "Claude-Mem");
-  } catch (error) {
-    memoryButton.textContent = "Claude-Mem unavailable · retry";
-    memoryState.textContent = "Claude-Mem · reconnecting";
-    lastMemoryQuery = "";
-    if (!silent) byId("truth").textContent = error.message;
-  } finally {
-    memoryButton.disabled = false;
-  }
-}
-
-memoryButton.addEventListener("click", async () => {
-  await syncClaudeMemory({ force: true });
-});
-
-byId("agent").addEventListener("click", async () => {
-  if (!transfer) return byId("truth").textContent = "Seal Agent 1's checkpoint first.";
-  byId("agent").disabled = true;
-  byId("truth").textContent = "Ox Alpha is continuing from the inherited state…";
-  try {
-    const capability = new URL(transfer.shareUrl);
-    const params = new URLSearchParams(capability.hash.slice(1));
-    const result = await json(await fetch(`/v1/relays/${params.get("id")}/agent/run`, {
-      method: "POST",
-      headers: { authorization: `Bearer ${params.get("token")}`, "content-type": "application/json" },
-      body: JSON.stringify({ target: "opencode", requestedBy: me.name, demo: true }),
-    }));
-    const ok = result.result.exitCode === 0;
-    await recordRoomActivity("agent", ok ? "Ox Alpha completed the inherited task" : "Ox Alpha returned a controlled stop", "Ox Alpha");
-    byId("truth").textContent = ok ? "Ox Alpha continued from the handoff." : "Ox Alpha stopped safely and returned control.";
-    addLog(ok ? "Ox Alpha accepted inherited context" : "Ox Alpha returned a controlled stop", ok ? "ok" : "warn");
-  } catch (error) {
-    byId("truth").textContent = error.message;
-    byId("agent").disabled = false;
-  }
-});
-
-byId("resume").addEventListener("click", async () => {
-  if (!transfer) return;
-  byId("resume").disabled = true;
-  try {
-    const capability = new URL(transfer.shareUrl);
-    const params = new URLSearchParams(capability.hash.slice(1));
-    const headers = { authorization: `Bearer ${params.get("token")}` };
-    const pod = await json(await fetch(`/v1/relays/${params.get("id")}/pod`, { headers }));
-    await json(await fetch(`/v1/relays/${params.get("id")}/accept`, {
-      method: "POST", headers: { ...headers, "content-type": "application/json" },
-      body: JSON.stringify({ actor: me.name, harness: "relay-live", restatedGoal: roomSnapshot?.brief.problem ?? "Continue the shared product work without rediscovery.", firstAction: roomSnapshot?.brief.implementation ?? scenario.investigation.nextAction, observedDigest: transfer.digest }),
-    }));
-    byId("action-count").textContent = "3";
-    byId("budget-count").textContent = "9";
-    await recordRoomActivity("resume", `accepted checkpoint with ${pod.camp.capsule.memories.length} memories`, me.name);
-    byId("truth").textContent = `${me.name} accepted ${pod.camp.capsule.memories.length} memories from the durable checkpoint.`;
-    addLog(`${me.name} resumed the shared product work without rediscovery`);
-  } catch (error) {
-    byId("truth").textContent = error.message;
-    byId("resume").disabled = false;
-  }
-});
-
-async function checkGreptile() {
-  byId("review").disabled = true;
-  byId("truth").textContent = "Checking the real Greptile review…";
-  try {
-    const result = await json(await fetch("/v1/integrations/greptile/improve", {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "thehimalayanleo/relay", remote: "github", defaultBranch: "main", branch: "main", prNumber: 1, iteration: 1, maxIterations: 5 }),
-    }));
-    byId("greptile-state").textContent = `Greptile: ${result.status}`;
-    byId("truth").textContent = result.status === "handoff-created" ? "Greptile found a verified issue and Relay created the next handoff." : "Greptile reports no unresolved finding.";
-    addLog(`Greptile · ${result.status}`);
-  } catch (error) {
-    byId("greptile-state").textContent = "Greptile: review unavailable";
-    byId("truth").textContent = `Greptile could not load a review: ${error.message}`;
-    addLog(`Greptile review unavailable · ${error.message}`, "warn");
-  } finally {
-    byId("review").disabled = false;
-  }
-}
-
-async function runArcTests() {
-  byId("truth").textContent = "Running the real ARC harness regression suite…";
-  addLog("Tests started", "warn");
-  try {
-    const result = await json(await fetch("/v1/demo/arc-tests", { method: "POST" }));
-    byId("test-count").textContent = `${result.passed} / ${result.passed + result.failed}`;
-    byId("truth").textContent = `${result.passed} tests passed. No failing regression.`;
-    addLog(`Tests complete · ${result.passed} passed · ${result.failed} failed`);
-  } catch (error) {
-    byId("truth").textContent = `Tests failed: ${error.message}`;
-    addLog(`Tests failed · ${error.message}`, "warn");
-  }
-}
-
-byId("review").addEventListener("click", checkGreptile);
-const bottomTabs = [...document.querySelectorAll(".bottom-tabs span")];
-for (const tab of bottomTabs) {
-  tab.setAttribute("role", "button");
-  tab.setAttribute("aria-label", `${tab.textContent.trim() === "Tests" ? "Run ARC tests" : "Check Greptile review"}`);
-  tab.tabIndex = 0;
-  tab.style.cursor = "pointer";
-  const activate = () => {
-    document.querySelectorAll(".bottom-tabs b, .bottom-tabs span").forEach((item) => {
-      item.style.color = item === tab ? "var(--text)" : "var(--muted)";
-      item.style.borderBottom = item === tab ? "2px solid var(--orange)" : "0";
-    });
-    return tab.textContent.trim() === "Tests" ? runArcTests() : checkGreptile();
-  };
-  tab.addEventListener("click", activate);
-  tab.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") activate(); });
-}
-const runTab = document.querySelector(".bottom-tabs b");
-runTab.setAttribute("role", "button");
-runTab.tabIndex = 0;
-runTab.style.cursor = "pointer";
-const showRun = () => {
-  byId("truth").textContent = currentArcRun
-    ? `${currentArcRun.status.toUpperCase()} · ${currentArcRun.observations.at(-1).state} · ${currentArcRun.actions.length} actions`
-    : "ARC run artifact is loading.";
-  document.querySelectorAll(".bottom-tabs b, .bottom-tabs span").forEach((item) => {
-    item.style.color = item === runTab ? "var(--text)" : "var(--muted)";
-    item.style.borderBottom = item === runTab ? "2px solid var(--orange)" : "0";
-  });
-};
-runTab.addEventListener("click", showRun);
-runTab.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") showRun(); });
-
-health();
-loadBugLedger();
-loadArcRun();
+await health(); renderSwitcher(); const initial = hashSession(); if (initial) connectSession(initial).catch((e) => { setStatus(e.message); modal.showModal(); }); else modal.showModal();

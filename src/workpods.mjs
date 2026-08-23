@@ -37,7 +37,7 @@ export class LocalWorkPodProvider {
     return { provider: this.name, configured: true, remote: false };
   }
 
-  async create({ id, capsule, digest }) {
+  async create({ id, capsule, digest, sessionSnapshot }) {
     assertPodId(id);
     const podRoot = path.join(this.root, id);
     await mkdir(podRoot, { recursive: false, mode: 0o700 });
@@ -47,10 +47,11 @@ export class LocalWorkPodProvider {
       state: "ready",
       cpu: "on-demand",
       createdAt: new Date().toISOString(),
-      files: [...FILES],
+      files: [...FILES, ...(sessionSnapshot ? ["SESSION.json"] : [])],
     };
     await writeFile(path.join(podRoot, "CAMP.json"), `${JSON.stringify(campBundle(capsule, digest), null, 2)}\n`, { mode: 0o600 });
     await writeFile(path.join(podRoot, "HANDOFF.md"), handoffMarkdown(capsule, digest), { mode: 0o600 });
+    if (sessionSnapshot) await writeFile(path.join(podRoot, "SESSION.json"), `${JSON.stringify(sessionSnapshot, null, 2)}\n`, { mode: 0o600 });
     await writeFile(path.join(podRoot, "manifest.json"), manifest(metadata), { mode: 0o600 });
     return metadata;
   }
@@ -62,6 +63,7 @@ export class LocalWorkPodProvider {
       ...metadata,
       camp: JSON.parse(await readFile(path.join(podRoot, "CAMP.json"), "utf8")),
       handoff: await readFile(path.join(podRoot, "HANDOFF.md"), "utf8"),
+      ...(metadata.files.includes("SESSION.json") ? { session: JSON.parse(await readFile(path.join(podRoot, "SESSION.json"), "utf8")) } : {}),
     };
   }
 
@@ -128,7 +130,7 @@ export class SailWorkPodProvider {
     return box;
   }
 
-  async create({ id, capsule, digest }) {
+  async create({ id, capsule, digest, sessionSnapshot }) {
     assertPodId(id);
     const { App, Sailbox } = await this.#sdk();
     const app = await App.find(this.appName, { mintIfMissing: true, client: this.client });
@@ -150,12 +152,13 @@ export class SailWorkPodProvider {
       state: "writing",
       cpu: "running",
       createdAt,
-      files: [...FILES],
+      files: [...FILES, ...(sessionSnapshot ? ["SESSION.json"] : [])],
     };
 
     try {
       await box.fs.write(`${rootPath}/CAMP.json`, `${JSON.stringify(campBundle(capsule, digest), null, 2)}\n`, { mode: 0o600 });
       await box.fs.write(`${rootPath}/HANDOFF.md`, handoffMarkdown(capsule, digest), { mode: 0o600 });
+      if (sessionSnapshot) await box.fs.write(`${rootPath}/SESSION.json`, `${JSON.stringify(sessionSnapshot, null, 2)}\n`, { mode: 0o600 });
       const sealed = { ...metadata, state: "paused", cpu: "paused", pausedAt: new Date().toISOString() };
       await box.fs.write(`${rootPath}/manifest.json`, manifest(sealed), { mode: 0o600 });
       await box.pause();
@@ -175,6 +178,7 @@ export class SailWorkPodProvider {
       resumedAt: new Date().toISOString(),
       camp: JSON.parse((await box.fs.read(`${metadata.rootPath}/CAMP.json`)).toString()),
       handoff: (await box.fs.read(`${metadata.rootPath}/HANDOFF.md`)).toString(),
+      ...(metadata.files.includes("SESSION.json") ? { session: JSON.parse((await box.fs.read(`${metadata.rootPath}/SESSION.json`)).toString()) } : {}),
     };
   }
 

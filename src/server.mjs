@@ -17,6 +17,7 @@ import { findingFromGreptileComment, improvementLoopDecision } from "./improveme
 import { CollaborationHub } from "./collaboration.mjs";
 import { ClaudeMemClient } from "./claude-mem.mjs";
 import { AgentRunQueue } from "./agent-queue.mjs";
+import { SessionFileStore, SessionService } from "./sessions.mjs";
 
 const sourceDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.dirname(sourceDir);
@@ -118,6 +119,36 @@ function receiptFrom(body, record, now = new Date()) {
   };
 }
 
+function checkpointCapsule(session) {
+  const metrics = session.greptile.samples.at(-1) ?? { opened: 0, closed: 0, remaining: 0, unknown: 0 };
+  return {
+    title: session.title,
+    goal: session.brief.problem || session.title,
+    acceptanceCriteria: [session.brief.acceptance].filter(Boolean),
+    state: {
+      completed: [`Greptile findings closed during this session: ${metrics.closed}`],
+      partial: [`Greptile findings remaining: ${metrics.remaining}`, `Shared brief version: ${session.version}`],
+      blocked: metrics.unknown ? [`${metrics.unknown} Greptile finding(s) have unknown status.`] : [],
+    },
+    decisions: [],
+    constraints: [session.brief.constraint].filter(Boolean),
+    artifacts: [
+      { label: "Session repository", uri: `https://github.com/${session.repository.name}`, status: "verified" },
+      ...Object.values(session.greptile.findings).filter((item) => item.url).map((item) => ({ label: `Greptile ${item.id}`, uri: item.url, status: "verified" })),
+    ],
+    memories: session.claudeMem.observationIds.map((id) => ({
+      type: "evidence", summary: `Claude-Mem observation ${id}`, source: "claude-mem", confidence: "verified",
+    })),
+    traceSummary: JSON.stringify({
+      sessionId: session.id, version: session.version, repository: session.repository,
+      greptile: metrics, claudeMemObservationIds: session.claudeMem.observationIds,
+    }),
+    nextAction: session.brief.implementation || "Review the shared brief and perform the next verified action.",
+    source: { harness: "relay-session", actor: "PM + SWE", taskId: session.id },
+    intendedRecipient: "shared-agent-queue",
+  };
+}
+
 export async function createRelayServer(options = {}) {
   const store = options.store ?? new FileStore(
     options.dataDir ?? process.env.RELAY_DATA_DIR ?? path.join(projectRoot, ".data"),
@@ -135,6 +166,12 @@ export async function createRelayServer(options = {}) {
   const collaboration = options.collaboration ?? new CollaborationHub();
   const claudeMem = options.claudeMem ?? new ClaudeMemClient();
   const agentQueue = options.agentQueue ?? new AgentRunQueue();
+  const sessionStore = options.sessionStore ?? new SessionFileStore(path.join(
+    options.dataDir ?? process.env.RELAY_DATA_DIR ?? path.join(projectRoot, ".data"),
+    "sessions",
+  ));
+  await sessionStore.init();
+  const sessions = options.sessions ?? new SessionService({ store: sessionStore, greptileClient });
 
   return createHttpServer(async (request, response) => {
     const url = new URL(request.url, `http://${request.headers.host ?? "localhost"}`);
@@ -173,6 +210,112 @@ export async function createRelayServer(options = {}) {
               transport: "finding-adapter",
             },
           },
+        });
+        return;
+      }
+
+      if (request.method === "POST" && url.pathname === "/v1/sessions") {
+        const body = await readJson(request);
+        const created = await sessions.create(body);
+        const origin = externalOrigin(request, url);
+        const fragment = `session=${encodeURIComponent(created.record.id)}&token=${encodeURIComponent(created.token)}`;
+        sendJson(response, 201, {
+          id: created.record.id,
+          token: created.token,
+          expiresAt: created.record.expiresAt,
+          creatorUrl: `${origin}/demo/greptile#${fragment}&role=${encodeURIComponent(body.creatorRole === "pm" ? "pm" : "swe")}`,
+          pmInviteUrl: `${origin}/demo/greptile#${fragment}&role=pm`,
+          snapshot: created.record,
+        });
+        return;
+      }
+
+      const sessionMatch = url.pathname.match(/^\/v1\/sessions\/([0-9a-f-]{36})$/i);
+      if (request.method === "GET" && sessionMatch) {
+        sendJson(response, 200, await sessions.get(sessionMatch[1], requestToken(request, url)));
+        return;
+      }
+
+      const sessionEventsMatch = url.pathname.match(/^\/v1\/sessions\/([0-9a-f-]{36})\/events$/i);
+      if (request.method === "GET" && sessionEventsMatch) {
+        response.writeHead(200, {
+          "content-type": "text/event-stream; charset=utf-8",
+          "cache-control": "no-cache, no-transform",
+          connection: "keep-alive",
+        });
+        const unsubscribe = await sessions.subscribe(sessionEventsMatch[1], requestToken(request, url), response);
+        request.on("close", unsubscribe);
+        return;
+      }
+
+      const sessionJoinMatch = url.pathname.match(/^\/v1\/sessions\/([0-9a-f-]{36})\/join$/i);
+      if (request.method === "POST" && sessionJoinMatch) {
+        sendJson(response, 200, await sessions.join(sessionJoinMatch[1], requestToken(request, url), await readJson(request)));
+        return;
+      }
+
+      const sessionBriefMatch = url.pathname.match(/^\/v1\/sessions\/([0-9a-f-]{36})\/brief$/i);
+      if (request.method === "POST" && sessionBriefMatch) {
+        sendJson(response, 200, await sessions.updateBrief(sessionBriefMatch[1], requestToken(request, url), await readJson(request)));
+        return;
+      }
+
+      const sessionActivityMatch = url.pathname.match(/^\/v1\/sessions\/([0-9a-f-]{36})\/activity$/i);
+      if (request.method === "POST" && sessionActivityMatch) {
+        sendJson(response, 201, await sessions.addActivity(sessionActivityMatch[1], requestToken(request, url), await readJson(request)));
+        return;
+      }
+
+      const sessionMemoryMatch = url.pathname.match(/^\/v1\/sessions\/([0-9a-f-]{36})\/memory$/i);
+      if (request.method === "POST" && sessionMemoryMatch) {
+        const body = await readJson(request);
+        sendJson(response, 200, await sessions.remember(sessionMemoryMatch[1], requestToken(request, url), body.observationIds));
+        return;
+      }
+
+      const sessionMetricsMatch = url.pathname.match(/^\/v1\/sessions\/([0-9a-f-]{36})\/metrics$/i);
+      if (request.method === "GET" && sessionMetricsMatch) {
+        sendJson(response, 200, await sessions.getMetrics(sessionMetricsMatch[1], requestToken(request, url)));
+        return;
+      }
+
+      const sessionGreptileMatch = url.pathname.match(/^\/v1\/sessions\/([0-9a-f-]{36})\/greptile\/sync$/i);
+      if (request.method === "POST" && sessionGreptileMatch) {
+        sendJson(response, 200, await sessions.syncGreptile(sessionGreptileMatch[1], requestToken(request, url)));
+        return;
+      }
+
+      const sessionCheckpointMatch = url.pathname.match(/^\/v1\/sessions\/([0-9a-f-]{36})\/checkpoints$/i);
+      if (request.method === "POST" && sessionCheckpointMatch) {
+        const token = requestToken(request, url);
+        const body = await readJson(request);
+        if (Array.isArray(body.claudeMemObservationIds) && body.claudeMemObservationIds.length) {
+          await sessions.remember(sessionCheckpointMatch[1], token, body.claudeMemObservationIds);
+        }
+        const session = await sessions.get(sessionCheckpointMatch[1], token);
+        const { record, token: relayToken } = createRecord(checkpointCapsule(session), { ttlHours: Number(body.ttlHours ?? 72) });
+        record.sessionId = session.id;
+        record.sessionVersion = session.version;
+        record.sessionSnapshot = session;
+        record.workPod = await workPodProvider.create({
+          id: record.id, capsule: record.capsule, digest: record.digest, sessionSnapshot: session,
+        });
+        try {
+          await store.create(record);
+        } catch (error) {
+          await workPodProvider.terminate(record.workPod).catch(() => {});
+          throw error;
+        }
+        const checkpoint = {
+          id: record.id, digest: record.digest, createdAt: new Date().toISOString(), actor: body.actor,
+          version: session.version, provider: record.workPod.provider, workPod: record.workPod,
+        };
+        await sessions.addCheckpoint(session.id, token, checkpoint);
+        const origin = externalOrigin(request, url);
+        sendJson(response, 201, {
+          ...checkpoint,
+          relayToken,
+          shareUrl: `${origin}/receiver#id=${encodeURIComponent(record.id)}&token=${encodeURIComponent(relayToken)}`,
         });
         return;
       }
