@@ -14,6 +14,7 @@ import { a2aErrorResponse, createA2aAgentCard, handleA2aJsonRpc } from "./a2a.mj
 import { greptileHandoffCapsule } from "./greptile.mjs";
 import { GreptileMcpClient } from "./greptile-mcp.mjs";
 import { findingFromGreptileComment, improvementLoopDecision } from "./improvement-loop.mjs";
+import { CollaborationHub } from "./collaboration.mjs";
 
 const sourceDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.dirname(sourceDir);
@@ -128,6 +129,7 @@ export async function createRelayServer(options = {}) {
   const agentRunner = options.agentRunner ?? new ConfiguredAgentRunner();
   const greptileClient = options.greptileClient ?? new GreptileMcpClient();
   const corsOrigin = options.corsOrigin ?? process.env.RELAY_CORS_ORIGIN ?? "*";
+  const collaboration = options.collaboration ?? new CollaborationHub();
 
   return createHttpServer(async (request, response) => {
     const url = new URL(request.url, `http://${request.headers.host ?? "localhost"}`);
@@ -167,6 +169,42 @@ export async function createRelayServer(options = {}) {
             },
           },
         });
+        return;
+      }
+
+      const roomMatch = url.pathname.match(/^\/v1\/rooms\/([a-z0-9_-]+)$/i);
+      if (request.method === "GET" && roomMatch) {
+        sendJson(response, 200, collaboration.snapshot(collaboration.room(roomMatch[1])));
+        return;
+      }
+
+      const eventsMatch = url.pathname.match(/^\/v1\/rooms\/([a-z0-9_-]+)\/events$/i);
+      if (request.method === "GET" && eventsMatch) {
+        response.writeHead(200, {
+          "content-type": "text/event-stream; charset=utf-8",
+          "cache-control": "no-cache, no-transform",
+          connection: "keep-alive",
+        });
+        const unsubscribe = collaboration.subscribe(eventsMatch[1], response);
+        request.on("close", unsubscribe);
+        return;
+      }
+
+      const joinMatch = url.pathname.match(/^\/v1\/rooms\/([a-z0-9_-]+)\/join$/i);
+      if (request.method === "POST" && joinMatch) {
+        sendJson(response, 200, collaboration.join(joinMatch[1], await readJson(request)));
+        return;
+      }
+
+      const updateRoomMatch = url.pathname.match(/^\/v1\/rooms\/([a-z0-9_-]+)\/brief$/i);
+      if (request.method === "POST" && updateRoomMatch) {
+        sendJson(response, 200, collaboration.update(updateRoomMatch[1], await readJson(request)));
+        return;
+      }
+
+      const activityMatch = url.pathname.match(/^\/v1\/rooms\/([a-z0-9_-]+)\/activity$/i);
+      if (request.method === "POST" && activityMatch) {
+        sendJson(response, 201, collaboration.addActivity(activityMatch[1], await readJson(request)));
         return;
       }
 

@@ -8,38 +8,83 @@ byId("provider").setAttribute("aria-live", "polite");
 byId("agent").title = "Seal Agent 1's checkpoint first.";
 byId("resume").title = "Seal Agent 1's checkpoint first.";
 
-document.querySelector(".mission h1").textContent = "Two people. One continuing agent.";
-document.querySelector(".mission p").textContent = "User 1 and User 2 work with the same live agent state instead of restarting separate agents and rebuilding context.";
-document.querySelector(".run-card p").textContent = "User 1 paused at step 2. The shared agent remains ready for User 2.";
-const collaboration = document.createElement("div");
-collaboration.style.cssText = "margin:12px;padding:11px 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel);display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:center;text-align:center";
-collaboration.innerHTML = '<div><strong style="display:block">User 1</strong><span style="color:var(--muted);font-size:10px">Exploring</span></div><div style="color:var(--orange);font-size:18px">⇄</div><div><strong style="display:block">User 2</strong><span style="color:var(--muted);font-size:10px">Continuing</span></div><div style="grid-column:1/-1;color:var(--green);font-size:10px">● SHARED AGENT STATE · EPISODE 8F2A</div>';
-document.querySelector(".mission").after(collaboration);
+document.querySelector(".run-card strong").textContent = "Relay product room";
+document.querySelector(".run-card p").textContent = "Sanjana shapes the product. Ajinkya implements. The agent follows one shared brief.";
 const workspaceVisual = document.createElement("div");
 workspaceVisual.style.cssText = "margin:0 12px 12px;padding:12px;border:1px solid var(--line);border-radius:8px;background:#101112";
 workspaceVisual.innerHTML = '<div style="display:flex;justify-content:space-between;margin-bottom:10px"><strong>Shared compute</strong><span id="workspace-mode" style="color:var(--muted);font-size:10px">Checking provider</span></div><div style="display:grid;grid-template-columns:1fr 28px 1fr;align-items:center;text-align:center"><div style="padding:10px 4px;border:1px solid var(--line);border-radius:6px"><span style="color:var(--orange)">▣</span><strong style="display:block">Box A</strong><small id="box-a-state" style="color:var(--muted)">User 1</small></div><span style="color:var(--orange)">→</span><div style="padding:10px 4px;border:1px solid var(--line);border-radius:6px"><span style="color:var(--orange)">▣</span><strong style="display:block">Box B</strong><small id="box-b-state" style="color:var(--muted)">User 2</small></div></div>';
-collaboration.after(workspaceVisual);
+document.querySelector(".mission").after(workspaceVisual);
+
+const roomId = "relay-product";
+const roleParam = new URLSearchParams(location.search).get("role") === "pm" ? "pm" : "swe";
+const me = roleParam === "pm"
+  ? { id: "sanjana-pm", name: "Sanjana", role: "Product Manager", color: "#ff5a1f" }
+  : { id: "ajinkya-swe", name: "Ajinkya", role: "SWE", color: "#7aa2f7" };
+const liveRoom = byId("live-room");
+liveRoom.innerHTML = `<div class="live-head"><strong>One shared brief</strong><small><span class="pulse"></span>SYNCED</small></div><div class="presence" id="presence"></div><div class="live-fields"><label>Customer problem<textarea data-field="problem"></textarea></label><label>PM constraint<textarea data-field="constraint"></textarea></label><label>Acceptance criteria<textarea data-field="acceptance"></textarea></label><label>Implementation<textarea data-field="implementation"></textarea></label></div><div class="live-foot"><span id="room-role">You are ${me.name} · ${me.role}</span><span id="room-version">v0</span></div>`;
+let roomSnapshot;
+let liveTimer;
+
+function renderRoom(snapshot) {
+  roomSnapshot = snapshot;
+  byId("room-version").textContent = `v${snapshot.version}`;
+  byId("presence").innerHTML = snapshot.participants.map((person) => `<div class="avatar" style="background:${person.color}" title="${person.name} · ${person.role}">${person.name[0]}</div><span>${person.name} · ${person.role}</span>`).join("");
+  for (const textarea of liveRoom.querySelectorAll("textarea")) {
+    if (document.activeElement !== textarea) textarea.value = snapshot.brief[textarea.dataset.field] ?? "";
+  }
+  const latest = snapshot.activity.at(-1);
+  if (latest && !byId("log").dataset.lastLiveEvent?.includes(latest.id)) {
+    byId("log").dataset.lastLiveEvent = latest.id;
+    addLog(`${latest.actor} ${latest.detail} · shared v${latest.version}`);
+  }
+}
+
+async function joinRoom() {
+  renderRoom(await json(await fetch(`/v1/rooms/${roomId}/join`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(me) })));
+}
+
+for (const textarea of liveRoom.querySelectorAll("textarea")) {
+  textarea.addEventListener("input", () => {
+    clearTimeout(liveTimer);
+    liveTimer = setTimeout(async () => {
+      renderRoom(await json(await fetch(`/v1/rooms/${roomId}/brief`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ actor: me.name, field: textarea.dataset.field, value: textarea.value }) })));
+    }, 180);
+  });
+}
+
+const roomEvents = new EventSource(`/v1/rooms/${roomId}/events`);
+for (const eventName of ["workspace", "presence", "activity"]) roomEvents.addEventListener(eventName, (event) => renderRoom(JSON.parse(event.data)));
+roomEvents.onerror = () => { byId("room-version").textContent = "reconnecting"; };
+joinRoom();
 
 const scenario = {
   finding: {
-    id: "relay-arc-resume-001",
-    repository: "thehimalayanleo/relay-arc-agi-3",
-    prUrl: "https://github.com/thehimalayanleo/relay-arc-agi-3/pull/1",
-    sha: "54f7679",
-    summary: "A resumed episode restored its observation but restarted the environment at position zero.",
-    severity: "high",
+    id: "relay-live-collaboration-001",
+    repository: "thehimalayanleo/relay",
+    prUrl: "https://github.com/thehimalayanleo/relay",
+    sha: "03583c5",
+    summary: "PM and SWE context lived in separate agent sessions, forcing decisions to be restated.",
+    severity: "medium",
     confidence: "high",
-    paths: ["src/relay_arc/core.py", "src/relay_arc/demo.py"],
-    evidence: ["Two initial RIGHT actions reached 2/3; the first resumed action regressed to 1/3."],
+    paths: ["src/collaboration.mjs", "public/greptile-demo.js"],
+    evidence: ["Two browser sessions now synchronize one versioned product brief through Relay."],
   },
   investigation: {
-    completed: ["Reproduced false continuity", "Added resumable environment protocol", "Verified 4 regression tests"],
-    constraints: ["Never claim ARC benchmark performance from the compatibility world"],
-    rejectedApproaches: ["Reload only the latest serialized observation"],
-    nextAction: "Restore the environment state, then continue with the remaining action budget.",
+    completed: ["Defined PM and SWE roles", "Added presence and synchronized product notes", "Preserved durable checkpoints"],
+    constraints: ["Keep Relay one-button, visual, and free of jargon-heavy forms"],
+    rejectedApproaches: ["Use two disconnected agent chats and manually copy context"],
+    nextAction: "Implement and test the task currently specified in the shared product brief.",
   },
-  acceptanceCriteria: ["Resume reaches 3/3 in exactly three total actions", "All tests pass"],
+  acceptanceCriteria: ["Both users see edits without refreshing", "Agent activity is visible to both roles", "A durable Relay checkpoint can still be sealed"],
 };
+
+async function recordRoomActivity(type, detail, actor = me.name) {
+  return json(await fetch(`/v1/rooms/${roomId}/activity`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ type, detail, actor }),
+  }));
+}
 
 async function json(response) {
   const body = await response.json();
@@ -189,9 +234,19 @@ byId("relay").addEventListener("click", async () => {
   byId("relay").disabled = true;
   byId("truth").textContent = "Sealing the useful episode state…";
   try {
+    const liveScenario = {
+      ...scenario,
+      investigation: {
+        ...scenario.investigation,
+        constraints: [roomSnapshot?.brief.constraint ?? scenario.investigation.constraints[0]],
+        nextAction: roomSnapshot?.brief.implementation ?? scenario.investigation.nextAction,
+      },
+      acceptanceCriteria: [roomSnapshot?.brief.acceptance ?? scenario.acceptanceCriteria[0]],
+    };
     transfer = await json(await fetch("/v1/integrations/greptile/handoffs", {
-      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...scenario, contextDrop }),
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...liveScenario, contextDrop }),
     }));
+    await recordRoomActivity("checkpoint", `sealed shared brief v${roomSnapshot?.version ?? 0}`, me.name);
     byId("resume").disabled = false;
     byId("resume").title = "Resume the shared episode as User 2.";
     byId("agent").disabled = !agentAvailable;
@@ -200,7 +255,7 @@ byId("relay").addEventListener("click", async () => {
     byId("workspace-mode").textContent = remote ? `Sail · ${transfer.workPod.appName}` : "Local fallback";
     byId("box-a-state").textContent = `${remote ? "Sailbox" : "Local pod"} · ${transfer.workPod.state}`;
     byId("box-b-state").textContent = remote ? `On demand · ${transfer.workPod.sailboxId.slice(0, 8)}` : `On demand · ${transfer.workPod.id.slice(0, 8)}`;
-    byId("truth").textContent = "Checkpoint sealed. A different person or agent can continue.";
+    byId("truth").textContent = `Shared brief v${roomSnapshot?.version ?? 0} sealed as a durable Relay checkpoint.`;
     addLog(`Checkpoint sealed · ${transfer.integration.memories} useful memories carried`);
   } catch (error) {
     byId("truth").textContent = error.message;
@@ -221,6 +276,7 @@ byId("agent").addEventListener("click", async () => {
       body: JSON.stringify({ target: "generic", demo: true }),
     }));
     const ok = result.result.exitCode === 0;
+    await recordRoomActivity("agent", ok ? "Ox Alpha completed the inherited task" : "Ox Alpha returned a controlled stop", "Ox Alpha");
     byId("truth").textContent = ok ? "Ox Alpha continued from the handoff." : "Ox Alpha stopped safely and returned control.";
     addLog(ok ? "Ox Alpha accepted inherited context" : "Ox Alpha returned a controlled stop", ok ? "ok" : "warn");
   } catch (error) {
@@ -239,12 +295,13 @@ byId("resume").addEventListener("click", async () => {
     const pod = await json(await fetch(`/v1/relays/${params.get("id")}/pod`, { headers }));
     await json(await fetch(`/v1/relays/${params.get("id")}/accept`, {
       method: "POST", headers: { ...headers, "content-type": "application/json" },
-      body: JSON.stringify({ actor: "agent-2", harness: "ox-alpha", restatedGoal: "Resume the ARC compatibility episode without rediscovery.", firstAction: scenario.investigation.nextAction, observedDigest: transfer.digest }),
+      body: JSON.stringify({ actor: me.name, harness: "relay-live", restatedGoal: roomSnapshot?.brief.problem ?? "Continue the shared product work without rediscovery.", firstAction: roomSnapshot?.brief.implementation ?? scenario.investigation.nextAction, observedDigest: transfer.digest }),
     }));
     byId("action-count").textContent = "3";
     byId("budget-count").textContent = "9";
-    byId("truth").textContent = `Agent 2 received ${pod.camp.capsule.memories.length} memories and completed the corridor.`;
-    addLog("Agent 2 resumed at 2/3 and completed at 3/3");
+    await recordRoomActivity("resume", `accepted checkpoint with ${pod.camp.capsule.memories.length} memories`, me.name);
+    byId("truth").textContent = `${me.name} accepted ${pod.camp.capsule.memories.length} memories from the durable checkpoint.`;
+    addLog(`${me.name} resumed the shared product work without rediscovery`);
   } catch (error) {
     byId("truth").textContent = error.message;
     byId("resume").disabled = false;
@@ -257,15 +314,15 @@ async function checkGreptile() {
   try {
     const result = await json(await fetch("/v1/integrations/greptile/improve", {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "thehimalayanleo/relay-arc-agi-3", remote: "github", defaultBranch: "main", branch: "codex/ox-resume-state", prNumber: 1, iteration: 1, maxIterations: 5 }),
+      body: JSON.stringify({ name: "thehimalayanleo/relay", remote: "github", defaultBranch: "main", branch: "main", prNumber: 1, iteration: 1, maxIterations: 5 }),
     }));
     byId("greptile-state").textContent = `Greptile: ${result.status}`;
     byId("truth").textContent = result.status === "handoff-created" ? "Greptile found a verified issue and Relay created the next handoff." : "Greptile reports no unresolved finding.";
     addLog(`Greptile · ${result.status}`);
   } catch (error) {
-    byId("greptile-state").textContent = "Greptile: indexing blocked";
-    byId("truth").textContent = "Greptile is connected, but this private repository still needs app access.";
-    addLog("Greptile access blocked · not counted as a code bug", "warn");
+    byId("greptile-state").textContent = "Greptile: review unavailable";
+    byId("truth").textContent = `Greptile could not load a review: ${error.message}`;
+    addLog(`Greptile review unavailable · ${error.message}`, "warn");
   } finally {
     byId("review").disabled = false;
   }

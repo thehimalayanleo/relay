@@ -18,6 +18,7 @@ The current release is a local or trusted-network prototype. It has no user acco
 
 ## What works
 
+- Real-time shared product rooms with PM/SWE presence, synchronized briefs, and a common agent activity stream.
 - One-button web-app overlay with a copyable browser handoff link.
 - HTTP API that any harness can call.
 - Dependency-free JavaScript client in `src/client.mjs` for direct harness integration.
@@ -37,12 +38,14 @@ This is not a full environment checkpoint. It transfers CAMP and handoff context
 
 Open `http://127.0.0.1:4317/demo/greptile` after starting Relay Core.
 
+- Open `?role=pm` for Sanjana and `?role=swe` for Ajinkya. Changes to the product brief appear in both sessions without refreshing.
+- Both collaborators observe the same agent activity stream, while agent runs remain serialized and auditable.
 - A structured code-review finding and the human-agent investigation become typed operational memory.
 - Relay seals that memory with a SHA-256 digest in a local pod or real Sailbox.
 - User 2 restores the same memory set and issues an acceptance receipt bound to that digest.
 - The UI labels fixture input, local pods, and real Sailboxes distinctly.
 
-The demo does not claim that Greptile is live unless an authenticated adapter supplied the finding. It also does not claim token or resolution-time savings. Those require the controlled evaluation described below.
+The live room synchronizes collaborative work state. It does not claim that two model processes execute concurrently. The demo also does not claim that Greptile is live unless an authenticated adapter supplied the finding, or claim token and resolution-time savings without the controlled evaluation described below.
 
 ## One repository
 
