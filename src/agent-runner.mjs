@@ -64,7 +64,10 @@ export class ConfiguredAgentRunner {
     const stderr = [];
     const stdoutState = { bytes: 0 };
     const stderrState = { bytes: 0 };
-    child.stdout.on("data", (chunk) => boundedAppend(stdout, chunk, stdoutState));
+    child.stdout.on("data", (chunk) => {
+      boundedAppend(stdout, chunk, stdoutState);
+      context.onProgress?.(chunk.toString("utf8"));
+    });
     child.stderr.on("data", (chunk) => boundedAppend(stderr, chunk, stderrState));
     child.stdin.end(prompt);
 

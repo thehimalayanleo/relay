@@ -419,7 +419,21 @@ export async function createRelayServer(options = {}) {
           target, requestedBy,
         }, async (queueJob) => {
           await sessions.addActivity(session.id, token, { type: "agent-running", actor: requestedBy, detail: `working in ${target} through the shared Sailbox` });
-          const result = await agentRunner.run(prompt, { requestedBy: body.requestedBy, queueJobId: queueJob.id, sessionId: session.id });
+          let lastProgressAt = 0;
+          let progressWrites = Promise.resolve();
+          const result = await agentRunner.run(prompt, {
+            requestedBy: body.requestedBy,
+            queueJobId: queueJob.id,
+            sessionId: session.id,
+            onProgress: (chunk) => {
+              const now = Date.now();
+              if (now - lastProgressAt < 1_500) return;
+              lastProgressAt = now;
+              const detail = agentProgressSummary(chunk);
+              progressWrites = progressWrites.then(() => sessions.addActivity(session.id, token, { type: "agent-progress", actor: requestedBy, detail })).catch(() => {});
+            },
+          });
+          await progressWrites;
           const latestRecord = await store.get(checkpoint.id);
           const workPod = await workPodProvider.storeAgentResult(latestRecord.workPod, result);
           await store.update(record.id, (current) => ({
@@ -924,4 +938,18 @@ function exactAgentResponse(stdout = "") {
     }
   }
   return text.join("\n").trim().slice(0, 4000) || "OpenCode completed with no text response.";
+}
+
+function agentProgressSummary(chunk = "") {
+  for (const line of String(chunk).trim().split("\n").reverse()) {
+    try {
+      const event = JSON.parse(line);
+      const part = event?.part ?? {};
+      if (event.type === "text" && typeof part.text === "string" && part.text.trim()) return `Writing: ${part.text.trim().replace(/\s+/g, " ").slice(0, 180)}`;
+      if (part.type === "tool" || event.type === "tool") return `Using ${part.tool ?? part.name ?? "a workspace tool"}`;
+      if (event.type === "step_start") return "Started a new model step";
+      if (event.type === "step_finish") return "Finished a model step";
+    } catch {}
+  }
+  return "Receiving live model output";
 }

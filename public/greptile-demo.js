@@ -2,6 +2,7 @@ const byId = (id) => document.getElementById(id);
 const RECENTS_KEY = "relay.sessions.v1";
 let active, snapshot, stream, presenceTimer, memoryTimer, memoryContext;
 let claudeMemReady = false;
+let liveAgentStartedAt = null;
 let selectedWorkspace = null;
 let discoveredWorkspaces = null;
 const syncedSessions = new Set();
@@ -36,8 +37,10 @@ function renderFeed() {
   const runs = [...latestByParticipant.values()].sort((a, b) => new Date(a.completedAt) - new Date(b.completedAt));
   const collaboratorEdit = [...(snapshot.activity ?? [])].reverse().find((event) => ["chat", "edit"].includes(event.type) && event.actor === "Sanjana");
   const editHtml = collaboratorEdit ? `<article class="event"><div class="avatar">S</div><div class="bubble"><strong>Sanjana · SWE</strong><time>${new Date(collaboratorEdit.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time><span class="inherited">Added to the shared agent stack</span><div class="agent-response">${esc(collaboratorEdit.value || collaboratorEdit.detail || snapshot.brief.implementation)}</div></div></article>` : "";
-  const liveAgent = [...(snapshot.activity ?? [])].reverse().find((event) => event.type === "agent-running" && !(snapshot.agentRuns ?? []).some((run) => run.requestedBy === event.actor && new Date(run.completedAt) >= new Date(event.at)));
-  const liveHtml = liveAgent ? `<article class="event live-agent"><div class="avatar">↗</div><div class="bubble"><strong>${esc(cleanLabel(liveAgent.actor))}</strong><span class="inherited"><i class="live-dot"></i> Working now · serialized through one Sailbox</span><div class="agent-response">${esc(liveAgent.detail)}</div></div></article>` : "";
+  const liveAgent = [...(snapshot.activity ?? [])].reverse().find((event) => ["agent-running", "agent-progress"].includes(event.type) && !(snapshot.agentRuns ?? []).some((run) => run.requestedBy === event.actor && new Date(run.completedAt) >= new Date(event.at)));
+  const started = liveAgent && [...(snapshot.activity ?? [])].reverse().find((event) => event.type === "agent-running" && event.actor === liveAgent.actor);
+  liveAgentStartedAt = started?.at ?? liveAgent?.at ?? null;
+  const liveHtml = liveAgent ? `<article class="event live-agent"><div class="avatar">↗</div><div class="bubble"><strong>${esc(cleanLabel(liveAgent.actor))}</strong><span class="inherited"><i class="live-dot"></i> Working now · <span id="live-elapsed">0s</span> · serialized through one Sailbox</span><div class="agent-response">${esc(liveAgent.detail)}</div><div class="live-track"><i></i></div></div></article>` : "";
   if (runs.length) {
     byId("feed").innerHTML = liveHtml + editHtml + runs.map((run) => {
       const participant = cleanLabel(run.requestedBy);
@@ -68,7 +71,7 @@ function render(next) {
   byId("presence").innerHTML = snapshot.participants.map((p) => `<div class="avatar" style="background:${esc(p.color)}" title="${esc(p.name)} · ${esc(p.role)}">${esc(p.name[0])}</div>`).join("");
   if (!byId("composer").dataset.ready) { byId("composer").value = ""; byId("composer").dataset.ready = "true"; }
   const runs = snapshot.agentRuns ?? [];
-  const liveAgent = [...(snapshot.activity ?? [])].reverse().find((event) => event.type === "agent-running" && !runs.some((run) => run.requestedBy === event.actor && new Date(run.completedAt) >= new Date(event.at)));
+  const liveAgent = [...(snapshot.activity ?? [])].reverse().find((event) => ["agent-running", "agent-progress"].includes(event.type) && !runs.some((run) => run.requestedBy === event.actor && new Date(run.completedAt) >= new Date(event.at)));
   const latestRun = runs.filter((run) => run.exitCode === 0 && run.response && run.response !== "OpenCode completed with no text response.").at(-1);
   byId("coordination-state").textContent = liveAgent ? `${cleanLabel(liveAgent.actor)} · working` : latestRun ? "1 agent continuation · 1 Sailbox" : "One serialized agent queue";
   byId("coordination-detail").textContent = liveAgent ? "Live host execution · next role waits in queue" : latestRun ? "Latest shared-stack continuation, preserved word for word" : `${snapshot.checkpoints.length} checkpoint${snapshot.checkpoints.length === 1 ? "" : "s"} · ready on host`;
@@ -153,3 +156,10 @@ window.addEventListener("hashchange", () => { const next = fromHash(); if (next 
 
 try { const [health, memory] = await Promise.all([json(await fetch("/health")), json(await fetch("/v1/integrations/claude-mem/status")).catch(() => ({ connected: false }))]); claudeMemReady = memory.connected; byId("sail-pill").textContent = health.workPod.provider === "sail" ? "Sail · ready" : "Local · ready"; byId("memory-pill").textContent = memory.connected ? "Claude-Mem · listening" : "Claude-Mem · optional"; } catch { status("Relay is offline."); }
 renderSessions(); const initial = fromHash(); if (initial) connect(initial).catch((e) => { status(e.message); dialog.showModal(); discoverWorkspaces(); }); else { dialog.showModal(); discoverWorkspaces(); }
+setInterval(() => {
+  const elapsed = byId("live-elapsed");
+  if (!elapsed || !liveAgentStartedAt) return;
+  const seconds = Math.max(0, Math.floor((Date.now() - new Date(liveAgentStartedAt).getTime()) / 1000));
+  elapsed.textContent = seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+  if (byId("coordination-detail")?.textContent.startsWith("Live host execution")) byId("coordination-detail").textContent = `Live host execution · ${elapsed.textContent} · next role waits in queue`;
+}, 1000);
