@@ -45,7 +45,8 @@
     "package": "scripts/package_release.sh",
     "cost": "node scripts/cost-model.mjs",
     "evaluate": "node scripts/evaluate.mjs examples/eval-results.example.json",
-    "e2e:arc-collaboration": "node scripts/e2e-arc-swe-collaboration.mjs"
+    "e2e:arc-collaboration": "node scripts/e2e-arc-swe-collaboration.mjs",
+    "e2e:arc-builder-challenger": "node scripts/e2e-arc-builder-challenger.mjs"
   },
   "engines": {
     "node": ">=20"

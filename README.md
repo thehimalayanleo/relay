@@ -308,6 +308,14 @@ npm run e2e:arc-collaboration
 
 The test fails unless Sanjana's exact feedback appears in the sealed session, the continuing agent inherits it, the response is retained, and the agent artifact uses the same Sailbox. Model execution remains serialized. This is not simultaneous model execution.
 
+The stricter builder/challenger contract test runs two independent OpenCode sessions against one Sailbox and refuses to promote the benchmark score when the sealed `savepoint-demo` artifacts are absent:
+
+```bash
+SAVEPOINT_REPO=/path/to/savepoint-demo npm run e2e:arc-builder-challenger
+```
+
+It preserves the primary-builder and independent-challenger prompts, checks distinct OpenCode session IDs, proves serialized execution, and reports `blocked_missing_repository` instead of fabricating the 12/183 baseline.
+
 Node-based harnesses can use the client directly:
 
 ```js
