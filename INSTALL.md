@@ -23,6 +23,14 @@ relay serve
 
 Relay prints separate PM and SWE dashboard URLs on startup. A second Mac can use the same Relay server only when it is reachable over a trusted network; do not expose this account-free prototype directly to the public internet.
 
+For a two-Mac demo over Tailscale, Ajinkya runs:
+
+```sh
+relay serve --host 0.0.0.0
+```
+
+Sanjana opens `http://AJINKYA_TAILSCALE_IP:4317/demo/greptile?role=pm`, while Ajinkya opens the same address with `?role=swe`. Both browsers then share one room, one memory-selection layer, and one serialized agent queue. Do not use an unrestricted public IP until team authentication is implemented.
+
 ## Start Relay with Ox Alpha
 
 OpenCode must already be signed in on the laptop. No additional model key is required.

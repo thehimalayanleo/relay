@@ -112,6 +112,8 @@ No GitHub login or repository token is required. Then run `relay serve` and open
 
 For optional backend integrations, run `relay configure` once. It prompts silently for Sail and Greptile keys and saves them locally with mode `0600`. Claude-Mem is auto-detected and remains optional.
 
+Two collaborators must point at the same Relay server. On a trusted Tailscale network, the host can run `relay serve --host 0.0.0.0`; collaborators then open the host's Tailscale address with `?role=pm` or `?role=swe`. Two independent localhost servers do not share a room.
+
 ```bash
 cd relay
 npm test
