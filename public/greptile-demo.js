@@ -24,8 +24,8 @@ function renderSessions() {
 function renderFeed() {
   const exactRuns = (snapshot.agentRuns ?? []).filter((run) => run.exitCode === 0 && run.response && run.response !== "OpenCode completed with no text response.");
   const runs = exactRuns.length ? exactRuns.slice(-1) : (snapshot.agentRuns ?? []).slice(-1);
-  const collaboratorEdit = [...(snapshot.activity ?? [])].reverse().find((event) => event.type === "edit" && event.actor === "Sanjana");
-  const editHtml = collaboratorEdit ? `<article class="event"><div class="avatar">S</div><div class="bubble"><strong>Sanjana · SWE</strong><time>${new Date(collaboratorEdit.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time><span class="inherited">Added to the shared agent stack</span><div class="agent-response">${esc(collaboratorEdit.value || snapshot.brief.implementation)}</div></div></article>` : "";
+  const collaboratorEdit = [...(snapshot.activity ?? [])].reverse().find((event) => ["chat", "edit"].includes(event.type) && event.actor === "Sanjana");
+  const editHtml = collaboratorEdit ? `<article class="event"><div class="avatar">S</div><div class="bubble"><strong>Sanjana · SWE</strong><time>${new Date(collaboratorEdit.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time><span class="inherited">Added to the shared agent stack</span><div class="agent-response">${esc(collaboratorEdit.value || collaboratorEdit.detail || snapshot.brief.implementation)}</div></div></article>` : "";
   if (runs.length) {
     byId("feed").innerHTML = editHtml + runs.map((run) => {
       const inherited = run.inheritedContext ? `Inherited: ${run.inheritedContext.problem} Constraint: ${run.inheritedContext.constraint} Next: ${run.inheritedContext.nextAction}` : "This legacy run did not retain its prompt text.";
@@ -39,22 +39,31 @@ function renderFeed() {
   byId("feed").innerHTML = event ? `<article class="event"><div class="avatar">${esc((event.actor || "R")[0])}</div><div class="bubble"><strong>${esc(event.actor || "Relay")}</strong><p>${esc(event.detail)}</p></div></article>` : "";
 }
 
+function renderGreptile() {
+  const samples = snapshot.greptile?.samples ?? [];
+  const latest = samples.at(-1) ?? { closed: 0, remaining: 0 };
+  byId("greptile-addressed").textContent = latest.closed ?? 0;
+  byId("greptile-open").textContent = latest.remaining ?? 0;
+  byId("greptile-note").textContent = !snapshot.repository.prNumber ? "No pull request linked" : samples.length ? `Review ${latest.iteration}` : "Waiting for first review";
+  const max = Math.max(1, ...samples.flatMap((sample) => [sample.closed, sample.remaining]));
+  byId("greptile-spark").innerHTML = samples.length ? samples.map((sample) => `<span class="spark-sample" title="${sample.closed} addressed, ${sample.remaining} open"><i style="height:${Math.max(2, sample.closed / max * 100)}%"></i><i class="open" style="height:${Math.max(2, sample.remaining / max * 100)}%"></i></span>`).join("") : '<span style="color:#666;font-size:10px;padding-bottom:7px">No Greptile samples yet</span>';
+}
+
 function render(next) {
   snapshot = { ...next, links: next.links ?? snapshot?.links, hostIntegrations: next.hostIntegrations ?? snapshot?.hostIntegrations };
   byId("session-title-view").textContent = snapshot.title;
   byId("session-subtitle").textContent = `${snapshot.repository.name}${snapshot.repository.prNumber ? ` · PR #${snapshot.repository.prNumber}` : " · new repository"} · v${snapshot.version}`;
   byId("presence").innerHTML = snapshot.participants.map((p) => `<div class="avatar" style="background:${esc(p.color)}" title="${esc(p.name)} · ${esc(p.role)}">${esc(p.name[0])}</div>`).join("");
-  if (document.activeElement !== byId("composer")) byId("composer").value = snapshot.brief.implementation ?? "";
+  if (!byId("composer").dataset.ready) { byId("composer").value = ""; byId("composer").dataset.ready = "true"; }
   const runs = snapshot.agentRuns ?? [];
-  const exactRuns = runs.filter((run) => run.exitCode === 0 && run.response && run.response !== "OpenCode completed with no text response.").slice(-2);
-  const boxes = [...new Set(exactRuns.map((run) => run.sailboxId).filter(Boolean))];
-  byId("coordination-state").textContent = exactRuns.length ? `${exactRuns.length} agent responses · ${boxes.length || 1} Sailbox` : "One serialized agent queue";
-  byId("coordination-detail").textContent = exactRuns.length ? "Latest Ajinkya + Sanjana handoff, preserved word for word" : `${snapshot.checkpoints.length} checkpoint${snapshot.checkpoints.length === 1 ? "" : "s"} · ready on host`;
+  const latestRun = runs.filter((run) => run.exitCode === 0 && run.response && run.response !== "OpenCode completed with no text response.").at(-1);
+  byId("coordination-state").textContent = latestRun ? "1 agent continuation · 1 Sailbox" : "One serialized agent queue";
+  byId("coordination-detail").textContent = latestRun ? "Latest shared-stack continuation, preserved word for word" : `${snapshot.checkpoints.length} checkpoint${snapshot.checkpoints.length === 1 ? "" : "s"} · ready on host`;
   byId("host-mode").textContent = ["pm", "collaborator"].includes(active.role) ? "Connected as Sanjana · SWE" : "Host integrations ready";
   byId("host-help").textContent = ["pm", "collaborator"].includes(active.role) ? "No local keys required" : "Powered by host integrations";
   const latestGreptile = snapshot.greptile?.samples?.at(-1) ?? { closed: 0, remaining: 0 };
   byId("greptile-pill").textContent = snapshot.repository.prNumber ? `Greptile · ${latestGreptile.closed} addressed · ${latestGreptile.remaining} open` : "Greptile · waiting for PR";
-  renderFeed(); remember();
+  renderFeed(); renderGreptile(); remember();
   clearTimeout(memoryTimer); memoryTimer = setTimeout(recallMemory, 900);
 }
 
@@ -78,7 +87,18 @@ async function updateField(field, value) {
   if (!active) return;
   render(await json(await fetch(`/v1/sessions/${active.id}/brief`, { method: "POST", headers: authHeaders({ "content-type": "application/json" }), body: JSON.stringify({ ...person(), actor: person().name, actorId: person().id, field, value }) })));
 }
-byId("send").onclick = () => updateField("implementation", byId("composer").value).then(() => status("Shared with the workspace.")).catch((e) => status(e.message));
+byId("send").onclick = async () => {
+  const value = byId("composer").value.trim();
+  if (!value) return;
+  byId("send").disabled = true;
+  try {
+    await updateField("implementation", value);
+    await json(await fetch(`/v1/sessions/${active.id}/activity`, { method: "POST", headers: authHeaders({ "content-type": "application/json" }), body: JSON.stringify({ type: "chat", actor: person().name, detail: value, value }) }));
+    byId("composer").value = "";
+    status("Added to the shared agent stack.");
+  } catch (error) { status(error.message); }
+  finally { byId("send").disabled = false; }
+};
 
 async function recallMemory() {
   if (!claudeMemReady || !snapshot) return;

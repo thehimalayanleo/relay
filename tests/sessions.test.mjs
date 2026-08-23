@@ -45,6 +45,14 @@ test("sessions are isolated and persist versioned edits", async () => {
   await assert.rejects(service.get(second.record.id, first.token), { code: "FORBIDDEN" });
 });
 
+test("chat activity retains exact collaborator text", async () => {
+  const { service } = await fixture();
+  const created = await service.create({ title: "Chat", repository });
+  await service.addActivity(created.record.id, created.token, { type: "chat", actor: "Sanjana", detail: "Add a replay guard", value: "Add a replay guard" });
+  const session = await service.get(created.record.id, created.token);
+  assert.equal(session.activity.at(-1).value, "Add a replay guard");
+});
+
 test("Greptile metrics close only findings first observed open", async () => {
   let iteration = 0;
   const greptileClient = {

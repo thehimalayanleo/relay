@@ -223,6 +223,7 @@ export class SessionService {
         id: randomUUID(), type: text(input.type, 40) || "agent",
         actor: text(input.actor, 80) || "Relay agent",
         detail: text(input.detail, 500) || "activity recorded",
+        value: text(input.value, 4_000),
         at: this.now().toISOString(), version: record.version,
       };
       record.activity.push(event);
