@@ -15,6 +15,7 @@
     "bin/",
     "src/",
     "public/",
+    "scripts/",
     "schema/",
     "examples/",
     "README.md",

@@ -316,6 +316,14 @@ SAVEPOINT_REPO=/path/to/savepoint-demo npm run e2e:arc-builder-challenger
 
 It preserves the primary-builder and independent-challenger prompts, checks distinct OpenCode session IDs, proves serialized execution, and reports `blocked_missing_repository` instead of fabricating the 12/183 baseline.
 
+Start the unattended presentation run again with one command:
+
+```bash
+relay arc run --repo-path "$PWD/savepoint-demo" --builder-burst 10 --cycles 1
+```
+
+Relay prints both browser links immediately, seals one Sailbox, runs ten bounded primary-builder continuations, then one independent challenger audit. The host queue continues if either browser closes. Each run receives the previous serialized output; model executions never overlap. Add `--repo OWNER/REPO --pr NUMBER` only when that exact pull request is indexed by Greptile. Relay never fabricates findings to make the plot nonzero.
+
 Node-based harnesses can use the client directly:
 
 ```js

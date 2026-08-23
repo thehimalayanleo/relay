@@ -413,9 +413,12 @@ export async function createRelayServer(options = {}) {
           : rendered;
         const continuity = priorResponse ? `\n\nPrevious serialized agent output from this Relay session:\n${priorResponse.slice(-6_000)}` : "";
         const prompt = `${basePrompt}${continuity}${roleInstructions ? `\n\nRole-specific instructions:\n${roleInstructions}` : ""}`;
+        const requestedBy = typeof body.requestedBy === "string" ? body.requestedBy : "session-api";
+        await sessions.addActivity(session.id, token, { type: "agent-queued", actor: requestedBy, detail: "queued behind the session's serialized agent runner" });
         const output = await agentQueue.enqueue(session.id, {
-          target, requestedBy: typeof body.requestedBy === "string" ? body.requestedBy : "session-api",
+          target, requestedBy,
         }, async (queueJob) => {
+          await sessions.addActivity(session.id, token, { type: "agent-running", actor: requestedBy, detail: `working in ${target} through the shared Sailbox` });
           const result = await agentRunner.run(prompt, { requestedBy: body.requestedBy, queueJobId: queueJob.id, sessionId: session.id });
           const latestRecord = await store.get(checkpoint.id);
           const workPod = await workPodProvider.storeAgentResult(latestRecord.workPod, result);

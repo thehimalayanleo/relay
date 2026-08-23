@@ -10,8 +10,8 @@ const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&
 const cleanLabel = (value) => String(value ?? "Agent").replace(/^\*\*|\*\*$/g, "").replace(/^\\+|\\+$/g, "").trim();
 async function json(response) { const body = await response.json(); if (!response.ok) throw new Error(body.message ?? body.error ?? `HTTP ${response.status}`); return body; }
 const authHeaders = (extra = {}) => ({ authorization: `Bearer ${active.token}`, ...extra });
-function fromHash() { const p = new URLSearchParams(location.hash.slice(1)); const role = ["pm", "collaborator"].includes(p.get("role")) ? p.get("role") : "swe"; return p.get("session") && p.get("token") ? { id: p.get("session"), token: p.get("token"), role } : null; }
-function person() { return ["pm", "collaborator"].includes(active.role) ? { id: `sanjana-swe-${active.id}`, name: "Sanjana", role: "SWE", color: "#ff5a1f" } : { id: `ajinkya-swe-${active.id}`, name: "Ajinkya", role: "SWE", color: "#7aa2f7" }; }
+function fromHash() { const p = new URLSearchParams(location.hash.slice(1)); const requestedRole = p.get("role"); const role = ["pm", "collaborator", "agent"].includes(requestedRole) ? requestedRole : "swe"; return p.get("session") && p.get("token") ? { id: p.get("session"), token: p.get("token"), role } : null; }
+function person() { if (active.role === "agent") return { id: `relay-agent-${active.id}`, name: "Relay agent", role: "Standalone", color: "#ff5a1f" }; return ["pm", "collaborator"].includes(active.role) ? { id: `sanjana-swe-${active.id}`, name: "Sanjana", role: "SWE", color: "#ff5a1f" } : { id: `ajinkya-swe-${active.id}`, name: "Ajinkya", role: "SWE", color: "#7aa2f7" }; }
 function recents() { try { return JSON.parse(localStorage.getItem(RECENTS_KEY) ?? "[]"); } catch { return []; } }
 function remember() {
   const item = { ...active, title: snapshot.title, updatedAt: snapshot.updatedAt };
@@ -36,15 +36,17 @@ function renderFeed() {
   const runs = [...latestByParticipant.values()].sort((a, b) => new Date(a.completedAt) - new Date(b.completedAt));
   const collaboratorEdit = [...(snapshot.activity ?? [])].reverse().find((event) => ["chat", "edit"].includes(event.type) && event.actor === "Sanjana");
   const editHtml = collaboratorEdit ? `<article class="event"><div class="avatar">S</div><div class="bubble"><strong>Sanjana · SWE</strong><time>${new Date(collaboratorEdit.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time><span class="inherited">Added to the shared agent stack</span><div class="agent-response">${esc(collaboratorEdit.value || collaboratorEdit.detail || snapshot.brief.implementation)}</div></div></article>` : "";
+  const liveAgent = [...(snapshot.activity ?? [])].reverse().find((event) => event.type === "agent-running" && !(snapshot.agentRuns ?? []).some((run) => run.requestedBy === event.actor && new Date(run.completedAt) >= new Date(event.at)));
+  const liveHtml = liveAgent ? `<article class="event live-agent"><div class="avatar">↗</div><div class="bubble"><strong>${esc(cleanLabel(liveAgent.actor))}</strong><span class="inherited"><i class="live-dot"></i> Working now · serialized through one Sailbox</span><div class="agent-response">${esc(liveAgent.detail)}</div></div></article>` : "";
   if (runs.length) {
-    byId("feed").innerHTML = editHtml + runs.map((run) => {
+    byId("feed").innerHTML = liveHtml + editHtml + runs.map((run) => {
       const participant = cleanLabel(run.requestedBy);
       const inherited = `Inherited: ${run.inheritedContext.problem} Constraint: ${run.inheritedContext.constraint} Next: ${run.inheritedContext.nextAction}`;
       return `<article class="event"><div class="avatar">${esc(participant[0])}</div><div class="bubble"><strong>${esc(participant)}</strong><time>${new Date(run.completedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time><span class="inherited">${esc(inherited)}</span><div class="agent-response">${esc(run.response)}</div></div></article>`;
     }).join("");
     return;
   }
-  if (editHtml) { byId("feed").innerHTML = editHtml; return; }
+  if (liveHtml || editHtml) { byId("feed").innerHTML = liveHtml + editHtml; return; }
   const event = snapshot.activity?.at(-1);
   byId("feed").innerHTML = event ? `<article class="event"><div class="avatar">${esc((event.actor || "R")[0])}</div><div class="bubble"><strong>${esc(event.actor || "Relay")}</strong><p>${esc(event.detail)}</p></div></article>` : "";
 }
@@ -66,11 +68,12 @@ function render(next) {
   byId("presence").innerHTML = snapshot.participants.map((p) => `<div class="avatar" style="background:${esc(p.color)}" title="${esc(p.name)} · ${esc(p.role)}">${esc(p.name[0])}</div>`).join("");
   if (!byId("composer").dataset.ready) { byId("composer").value = ""; byId("composer").dataset.ready = "true"; }
   const runs = snapshot.agentRuns ?? [];
+  const liveAgent = [...(snapshot.activity ?? [])].reverse().find((event) => event.type === "agent-running" && !runs.some((run) => run.requestedBy === event.actor && new Date(run.completedAt) >= new Date(event.at)));
   const latestRun = runs.filter((run) => run.exitCode === 0 && run.response && run.response !== "OpenCode completed with no text response.").at(-1);
-  byId("coordination-state").textContent = latestRun ? "1 agent continuation · 1 Sailbox" : "One serialized agent queue";
-  byId("coordination-detail").textContent = latestRun ? "Latest shared-stack continuation, preserved word for word" : `${snapshot.checkpoints.length} checkpoint${snapshot.checkpoints.length === 1 ? "" : "s"} · ready on host`;
-  byId("host-mode").textContent = ["pm", "collaborator"].includes(active.role) ? "Connected as Sanjana · SWE" : "Host integrations ready";
-  byId("host-help").textContent = ["pm", "collaborator"].includes(active.role) ? "No local keys required" : "Powered by host integrations";
+  byId("coordination-state").textContent = liveAgent ? `${cleanLabel(liveAgent.actor)} · working` : latestRun ? "1 agent continuation · 1 Sailbox" : "One serialized agent queue";
+  byId("coordination-detail").textContent = liveAgent ? "Live host execution · next role waits in queue" : latestRun ? "Latest shared-stack continuation, preserved word for word" : `${snapshot.checkpoints.length} checkpoint${snapshot.checkpoints.length === 1 ? "" : "s"} · ready on host`;
+  byId("host-mode").textContent = active.role === "agent" ? "Standalone agent mode" : ["pm", "collaborator"].includes(active.role) ? "Connected as Sanjana · SWE" : "Host integrations ready";
+  byId("host-help").textContent = active.role === "agent" ? "Runs without either browser open" : ["pm", "collaborator"].includes(active.role) ? "No local keys required" : "Powered by host integrations";
   const latestGreptile = snapshot.greptile?.samples?.at(-1) ?? { closed: 0, remaining: 0 };
   byId("greptile-pill").textContent = snapshot.repository.prNumber ? `Greptile · ${latestGreptile.closed} addressed · ${latestGreptile.remaining} open` : "Greptile · waiting for PR";
   renderFeed(); renderGreptile(); remember();

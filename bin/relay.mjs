@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 import { readFile } from "node:fs/promises";
 import { chmod, mkdir, writeFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 function usage() {
   console.log(`Relay CLI
@@ -13,6 +15,7 @@ Usage:
   relay serve [--host HOST] [--port PORT] [--public-url URL]
   relay configure
   relay session create --title TEXT --repo OWNER/REPO --pr NUMBER [--server URL]
+  relay arc run --repo-path PATH [--builder-burst 10] [--cycles 1] [--server URL]
   relay doctor [--server URL]
   relay handoff [notes.txt|-] --goal TEXT --next TEXT [--to TARGET] [--from HARNESS] [--pod] [--quiet]
   relay create <capsule.json> [--pod] [--ttl HOURS] [--quiet] [--server URL]
@@ -239,6 +242,30 @@ async function main() {
     console.log(`Host:   ${created.hostWorkspaceUrl ?? created.creatorUrl}`);
     console.log(`Invite: ${created.collaboratorInviteUrl ?? created.pmInviteUrl}`);
     console.log(`Expires: ${created.expiresAt}`);
+    return;
+  }
+
+  if (command === "arc" && process.argv[3] === "run") {
+    const repositoryRoot = path.resolve(option("--repo-path", "savepoint-demo"));
+    const script = fileURLToPath(new URL("../scripts/run-arc-autonomous-loop.mjs", import.meta.url));
+    const child = spawn(process.execPath, [script], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        SAVEPOINT_REPO: repositoryRoot,
+        RELAY_SERVER: server,
+        RELAY_ARC_BUILDER_BURST: option("--builder-burst", "10"),
+        RELAY_ARC_CYCLES: option("--cycles", "1"),
+        RELAY_SESSION_REPO: option("--repo", process.env.RELAY_SESSION_REPO ?? "savepoint-demo"),
+        RELAY_SESSION_PR: option("--pr", process.env.RELAY_SESSION_PR ?? ""),
+      },
+      stdio: "inherit",
+    });
+    const exitCode = await new Promise((resolve, reject) => {
+      child.once("error", reject);
+      child.once("close", (code) => resolve(code ?? 1));
+    });
+    if (exitCode !== 0) throw new Error(`ARC autonomous run exited with status ${exitCode}.`);
     return;
   }
 
