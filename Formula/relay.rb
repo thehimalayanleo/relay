@@ -1,9 +1,9 @@
 class Relay < Formula
   desc "Carry active work between people and AI agents"
   homepage "https://github.com/thehimalayanleo/relay"
-  url "https://github.com/thehimalayanleo/relay/archive/baaa42e.tar.gz"
+  url "https://github.com/thehimalayanleo/relay/archive/06421bc.tar.gz"
   version "0.1.0"
-  sha256 "320e8d45ac973cd39679d3bb1ee81c033b1627212f3e637b3554cb6c1fda4944"
+  sha256 "29259b764e594148571c58cfe486291148d7c5799bbbd809c4ebda84e97194c7"
   license "MIT"
 
   depends_on "node"
