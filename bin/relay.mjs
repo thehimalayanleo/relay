@@ -237,7 +237,7 @@ async function main() {
     });
     console.log("Relay session ready");
     console.log(`Host:   ${created.hostWorkspaceUrl ?? created.creatorUrl}`);
-    console.log(`Invite: ${created.pmInviteUrl}`);
+    console.log(`Invite: ${created.collaboratorInviteUrl ?? created.pmInviteUrl}`);
     console.log(`Expires: ${created.expiresAt}`);
     return;
   }

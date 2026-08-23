@@ -9,8 +9,8 @@ const syncedSessions = new Set();
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[c]));
 async function json(response) { const body = await response.json(); if (!response.ok) throw new Error(body.message ?? body.error ?? `HTTP ${response.status}`); return body; }
 const authHeaders = (extra = {}) => ({ authorization: `Bearer ${active.token}`, ...extra });
-function fromHash() { const p = new URLSearchParams(location.hash.slice(1)); return p.get("session") && p.get("token") ? { id: p.get("session"), token: p.get("token"), role: p.get("role") === "pm" ? "pm" : "swe" } : null; }
-function person() { return active.role === "pm" ? { id: `sanjana-pm-${active.id}`, name: "Sanjana", role: "Product Manager", color: "#ff5a1f" } : { id: `ajinkya-swe-${active.id}`, name: "Ajinkya", role: "SWE", color: "#7aa2f7" }; }
+function fromHash() { const p = new URLSearchParams(location.hash.slice(1)); const role = ["pm", "collaborator"].includes(p.get("role")) ? p.get("role") : "swe"; return p.get("session") && p.get("token") ? { id: p.get("session"), token: p.get("token"), role } : null; }
+function person() { return ["pm", "collaborator"].includes(active.role) ? { id: `sanjana-swe-${active.id}`, name: "Sanjana", role: "SWE", color: "#ff5a1f" } : { id: `ajinkya-swe-${active.id}`, name: "Ajinkya", role: "SWE", color: "#7aa2f7" }; }
 function recents() { try { return JSON.parse(localStorage.getItem(RECENTS_KEY) ?? "[]"); } catch { return []; } }
 function remember() { const item = { ...active, title: snapshot.title, lastOpenedAt: new Date().toISOString() }; localStorage.setItem(RECENTS_KEY, JSON.stringify([item, ...recents().filter((x) => x.id !== item.id)].slice(0, 12))); renderSessions(); }
 const status = (message) => { byId("truth").textContent = message; };
@@ -47,8 +47,8 @@ function render(next) {
   const boxes = [...new Set(exactRuns.map((run) => run.sailboxId).filter(Boolean))];
   byId("coordination-state").textContent = exactRuns.length ? `${exactRuns.length} agent responses · ${boxes.length || 1} Sailbox` : "One serialized agent queue";
   byId("coordination-detail").textContent = exactRuns.length ? "Latest Ajinkya + Sanjana handoff, preserved word for word" : `${snapshot.checkpoints.length} checkpoint${snapshot.checkpoints.length === 1 ? "" : "s"} · ready on host`;
-  byId("host-mode").textContent = active.role === "pm" ? "Connected as Sanjana" : "Host integrations ready";
-  byId("host-help").textContent = active.role === "pm" ? "No local keys required" : "Powered by host integrations";
+  byId("host-mode").textContent = ["pm", "collaborator"].includes(active.role) ? "Connected as Sanjana · SWE" : "Host integrations ready";
+  byId("host-help").textContent = ["pm", "collaborator"].includes(active.role) ? "No local keys required" : "Powered by host integrations";
   const latestGreptile = snapshot.greptile?.samples?.at(-1) ?? { closed: 0, remaining: 0 };
   byId("greptile-pill").textContent = snapshot.repository.prNumber ? `Greptile · ${latestGreptile.closed} addressed · ${latestGreptile.remaining} open` : "Greptile · waiting for PR";
   renderFeed(); remember();
@@ -64,7 +64,7 @@ async function connect(session) {
   stream = new EventSource(`/v1/sessions/${active.id}/events?token=${encodeURIComponent(active.token)}`);
   for (const name of ["workspace", "presence", "activity", "memory", "checkpoint", "greptile", "agent-queue"]) stream.addEventListener(name, (event) => render(JSON.parse(event.data)));
   stream.onerror = () => status("Reconnecting to the shared workspace…");
-  status(active.role === "pm" ? "You are in Ajinkya’s live workspace. No setup required." : `Session ready · invite expires ${new Date(snapshot.expiresAt).toLocaleString()}`);
+  status(["pm", "collaborator"].includes(active.role) ? "You are in Ajinkya’s live workspace. No setup required." : `Session ready · invite expires ${new Date(snapshot.expiresAt).toLocaleString()}`);
   if (snapshot.repository.prNumber && !syncedSessions.has(active.id)) {
     syncedSessions.add(active.id);
     fetch(`/v1/sessions/${active.id}/greptile/sync`, { method: "POST", headers: authHeaders() }).then(json).then((metrics) => status(`Greptile · ${metrics.totals.closed} addressed · ${metrics.totals.remaining} open`)).catch(() => { byId("greptile-pill").textContent = "Greptile · PR not indexed"; });
@@ -88,8 +88,8 @@ async function recallMemory() {
   } catch { byId("memory-pill").textContent = "Claude-Mem · optional"; }
 }
 
-byId("invite-session").onclick = async () => { if (!snapshot) return; await navigator.clipboard.writeText(snapshot.links?.pmInviteUrl ?? active.inviteUrl); status("Invite copied. Sanjana only needs the link."); };
-byId("preview-session").onclick = () => snapshot && window.open(snapshot.links?.pmInviteUrl ?? active.inviteUrl, "relay-pm-preview");
+byId("invite-session").onclick = async () => { if (!snapshot) return; await navigator.clipboard.writeText(snapshot.links?.collaboratorInviteUrl ?? snapshot.links?.pmInviteUrl ?? active.inviteUrl); status("Invite copied. Sanjana only needs the link."); };
+byId("preview-session").onclick = () => snapshot && window.open(snapshot.links?.collaboratorInviteUrl ?? snapshot.links?.pmInviteUrl ?? active.inviteUrl, "relay-swe-preview");
 
 const dialog = byId("session-dialog");
 async function discoverWorkspaces() {

@@ -44,7 +44,8 @@
     "package:macos": "apps/macos/scripts/build_app.sh",
     "package": "scripts/package_release.sh",
     "cost": "node scripts/cost-model.mjs",
-    "evaluate": "node scripts/evaluate.mjs examples/eval-results.example.json"
+    "evaluate": "node scripts/evaluate.mjs examples/eval-results.example.json",
+    "e2e:arc-collaboration": "node scripts/e2e-arc-swe-collaboration.mjs"
   },
   "engines": {
     "node": ">=20"

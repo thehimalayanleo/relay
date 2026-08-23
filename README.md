@@ -287,26 +287,26 @@ node bin/relay.mjs agent '<share-url>' --target generic
 
 The result is written back into the same work pod as `agents/<run-id>.json`. This is the first no-human loop. A production scheduler, cancellation API, model endpoint policy, and multi-step supervision remain future work.
 
-### Two local OpenCode sessions, one Sailbox
+### Canonical E2E: two SWEs build the AGI-ARC-3 harness
 
 The host can configure OpenCode Go as Relay's serialized runner:
 
 ```bash
-export RELAY_AGENT_HARNESS=opencode-go-ox-alpha
-export RELAY_OPENCODE_MODEL=opencode-go/ox-alpha-free
+export RELAY_AGENT_HARNESS=opencode-go-gpt-5.6-luna
+export RELAY_OPENCODE_MODEL=opencode-go/gpt-5.6-luna
 export RELAY_AGENT_ARGV='["relay-opencode-runner"]'
 relay serve --host 0.0.0.0 --public-url http://<tailscale-name>:4317
 ```
 
-In the dashboard, seal one checkpoint and select **Run Ajinkya + Sanjana**. Relay submits both requests together, starts two separate local OpenCode sessions, and serializes them through the session queue. Both results are written into the same Sailbox as distinct `agents/<run-id>.json` artifacts. The coordination panel shows each OpenCode session ID, queue job ID, start and completion time, and the shared Sailbox ID.
+Ajinkya starts the AGI-ARC-3 harness from his local Relay app. Sanjana joins as a second SWE through the capability link, adds a concrete fresh-reset replay constraint, and hands the shared state back. Ajinkya's local agent continues from the same Sailbox with Sanjana's wording present in its inherited context. Relay retains the exact response and queue evidence.
 
 From a source checkout, the reproducible proof is:
 
 ```bash
-node scripts/demo-two-opencode-one-sailbox.mjs
+npm run e2e:arc-collaboration
 ```
 
-This is two independent model processes coordinated sequentially through one durable workspace. It is not simultaneous model execution.
+The test fails unless Sanjana's exact feedback appears in the sealed session, the continuing agent inherits it, the response is retained, and the agent artifact uses the same Sailbox. Model execution remains serialized. This is not simultaneous model execution.
 
 Node-based harnesses can use the client directly:
 
