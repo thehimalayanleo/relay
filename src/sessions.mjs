@@ -32,9 +32,9 @@ function sessionError(code, message) {
 
 function normalizeRepository(input = {}) {
   const name = text(input.name, 240);
-  const prNumber = Number(input.prNumber);
-  if (!name || !Number.isInteger(prNumber) || prNumber <= 0) {
-    throw new TypeError("A Greptile repository name and positive PR number are required.");
+  const prNumber = input.prNumber == null ? null : Number(input.prNumber);
+  if (!name || (prNumber !== null && (!Number.isInteger(prNumber) || prNumber <= 0))) {
+    throw new TypeError("A GitHub repository and, when supplied, a positive PR number are required.");
   }
   return {
     name,
@@ -249,6 +249,7 @@ export class SessionService {
 
   async syncGreptile(id, token) {
     const record = this.assertReadable(await this.store.get(id), token);
+    if (!record.repository.prNumber) throw sessionError("NO_PULL_REQUEST", "Greptile starts after this repository has a pull request.");
     const [openResult, addressedResult] = await Promise.all([
       this.greptileClient.listGreptileComments(record.repository, false),
       this.greptileClient.listGreptileComments(record.repository, true),

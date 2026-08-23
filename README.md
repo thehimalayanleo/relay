@@ -20,6 +20,7 @@ The current release is a local or trusted-network prototype. It has no user acco
 
 - Persistent capability-scoped sessions with PM/SWE presence, synchronized briefs, and a common agent activity stream.
 - Browser-local recent-session switching, one-click PM invitations, and 72-hour capability expiry.
+- Goal-first workspace discovery from the host's Greptile-indexed pull requests, plus an explicit host-only action to create a new private GitHub repository.
 - Session-specific Greptile timelines that distinguish closed, remaining, and unknown findings without crediting disappearance as resolution.
 - Claude-Mem adapter for retrieving cited session observations before Relay seals the transferable subset.
 - Serialized model-run queue shared by HTTP, CLI, JavaScript, OpenCode, and Google A2A entry points.
@@ -42,10 +43,11 @@ This is not a full environment checkpoint. It transfers CAMP and handoff context
 
 Open `http://127.0.0.1:4317/demo/greptile` after starting Relay Core.
 
-- Ajinkya creates a session, selects a Greptile repository and PR, then copies the PM capability link for Sanjana.
+- Ajinkya describes the work. Relay ranks the host's Greptile-indexed pull requests, or explicitly creates a new private GitHub repository when the work is greenfield.
 - Sanjana follows that link. Changes to the product brief appear in both browsers without refreshing.
 - Each browser remembers only the sessions whose capability links it has opened. The server exposes no global session list.
-- Both collaborators observe the same agent activity stream, while agent runs remain serialized and auditable.
+- Both collaborators observe the same agent activity stream and exact retained agent responses, while agent runs remain serialized and auditable.
+- The main workspace shows Greptile findings addressed and remaining. Relay attributes the fixes to the human-agent loop, not Greptile.
 - A structured code-review finding and the human-agent investigation become typed operational memory.
 - Relay seals that memory with a SHA-256 digest in a local pod or real Sailbox.
 - User 2 restores the same memory set and issues an acceptance receipt bound to that digest.

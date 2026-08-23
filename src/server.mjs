@@ -239,6 +239,23 @@ export async function createRelayServer(options = {}) {
         return;
       }
 
+      if (request.method === "POST" && url.pathname === "/v1/integrations/github/repositories") {
+        const remote = request.socket.remoteAddress ?? "";
+        if (!["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(remote)) {
+          const error = new Error("Creating a GitHub repository is restricted to the Relay host.");
+          error.code = "FORBIDDEN";
+          throw error;
+        }
+        const body = await readJson(request);
+        const name = String(body.name ?? "").trim().toLowerCase();
+        if (!/^[a-z0-9][a-z0-9._-]{1,99}$/.test(name)) throw new Error("Repository name must be 2-100 URL-safe characters.");
+        const description = String(body.description ?? "Relay shared-agent workspace").trim().slice(0, 300);
+        const { stdout } = await execFileAsync("gh", ["api", "-X", "POST", "user/repos", "-f", `name=${name}`, "-f", `description=${description}`, "-F", "private=true", "-F", "auto_init=true"], { timeout: 30_000, maxBuffer: 1_000_000 });
+        const repository = JSON.parse(stdout);
+        sendJson(response, 201, { name: repository.full_name, url: repository.html_url, private: repository.private, defaultBranch: repository.default_branch ?? "main" });
+        return;
+      }
+
       if (request.method === "POST" && url.pathname === "/v1/sessions") {
         const body = await readJson(request);
         const created = await sessions.create(body);

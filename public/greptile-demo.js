@@ -2,6 +2,9 @@ const byId = (id) => document.getElementById(id);
 const RECENTS_KEY = "relay.sessions.v1";
 let active, snapshot, stream, presenceTimer, memoryTimer, memoryContext;
 let claudeMemReady = false;
+let selectedWorkspace = null;
+let discoveredWorkspaces = null;
+const syncedSessions = new Set();
 
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[c]));
 async function json(response) { const body = await response.json(); if (!response.ok) throw new Error(body.message ?? body.error ?? `HTTP ${response.status}`); return body; }
@@ -36,7 +39,7 @@ function renderFeed() {
 function render(next) {
   snapshot = { ...next, links: next.links ?? snapshot?.links, hostIntegrations: next.hostIntegrations ?? snapshot?.hostIntegrations };
   byId("session-title-view").textContent = snapshot.title;
-  byId("session-subtitle").textContent = `${snapshot.repository.name} · PR #${snapshot.repository.prNumber} · v${snapshot.version}`;
+  byId("session-subtitle").textContent = `${snapshot.repository.name}${snapshot.repository.prNumber ? ` · PR #${snapshot.repository.prNumber}` : " · new repository"} · v${snapshot.version}`;
   byId("presence").innerHTML = snapshot.participants.map((p) => `<div class="avatar" style="background:${esc(p.color)}" title="${esc(p.name)} · ${esc(p.role)}">${esc(p.name[0])}</div>`).join("");
   if (document.activeElement !== byId("composer")) byId("composer").value = snapshot.brief.implementation ?? "";
   const runs = snapshot.agentRuns ?? [];
@@ -46,6 +49,8 @@ function render(next) {
   byId("coordination-detail").textContent = exactRuns.length ? "Latest Ajinkya + Sanjana handoff, preserved word for word" : `${snapshot.checkpoints.length} checkpoint${snapshot.checkpoints.length === 1 ? "" : "s"} · ready on host`;
   byId("host-mode").textContent = active.role === "pm" ? "Connected as Sanjana" : "Host integrations ready";
   byId("host-help").textContent = active.role === "pm" ? "No local keys required" : "Powered by host integrations";
+  const latestGreptile = snapshot.greptile?.samples?.at(-1) ?? { closed: 0, remaining: 0 };
+  byId("greptile-pill").textContent = snapshot.repository.prNumber ? `Greptile · ${latestGreptile.closed} addressed · ${latestGreptile.remaining} open` : "Greptile · waiting for PR";
   renderFeed(); remember();
   clearTimeout(memoryTimer); memoryTimer = setTimeout(recallMemory, 900);
 }
@@ -60,6 +65,10 @@ async function connect(session) {
   for (const name of ["workspace", "presence", "activity", "memory", "checkpoint", "greptile", "agent-queue"]) stream.addEventListener(name, (event) => render(JSON.parse(event.data)));
   stream.onerror = () => status("Reconnecting to the shared workspace…");
   status(active.role === "pm" ? "You are in Ajinkya’s live workspace. No setup required." : `Session ready · invite expires ${new Date(snapshot.expiresAt).toLocaleString()}`);
+  if (snapshot.repository.prNumber && !syncedSessions.has(active.id)) {
+    syncedSessions.add(active.id);
+    fetch(`/v1/sessions/${active.id}/greptile/sync`, { method: "POST", headers: authHeaders() }).then(json).then((metrics) => status(`Greptile · ${metrics.totals.closed} addressed · ${metrics.totals.remaining} open`)).catch(() => { byId("greptile-pill").textContent = "Greptile · PR not indexed"; });
+  }
 }
 
 async function updateField(field, value) {
@@ -83,9 +92,28 @@ byId("invite-session").onclick = async () => { if (!snapshot) return; await navi
 byId("preview-session").onclick = () => snapshot && window.open(snapshot.links?.pmInviteUrl ?? active.inviteUrl, "relay-pm-preview");
 
 const dialog = byId("session-dialog");
-byId("new-session").onclick = () => dialog.showModal(); byId("close-sheet").onclick = () => dialog.close();
-byId("session-form").onsubmit = async (event) => { event.preventDefault(); byId("create-session").disabled = true; try { const created = await json(await fetch("/v1/sessions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ title: byId("session-title").value, creatorRole: "swe", repository: { name: byId("session-repo").value, prNumber: Number(byId("session-pr").value), remote: "github", defaultBranch: "main" } }) })); history.replaceState(null, "", new URL(created.creatorUrl).hash); dialog.close(); await connect(fromHash()); } catch (e) { byId("session-error").textContent = e.message; } finally { byId("create-session").disabled = false; } };
+async function discoverWorkspaces() {
+  if (!discoveredWorkspaces) byId("workspace-results").innerHTML = '<span style="color:#777;font-size:12px">Searching the host’s active work…</span>';
+  try {
+    if (!discoveredWorkspaces) {
+      const data = await json(await fetch("/v1/integrations/greptile/pull-requests?limit=50"));
+      discoveredWorkspaces = data.result?.mergeRequests ?? [];
+    }
+    const words = byId("session-title").value.toLowerCase().split(/\W+/).filter((word) => word.length > 2);
+    const options = discoveredWorkspaces.map((pr) => ({ name: pr.repository.name, prNumber: pr.number, title: pr.title, branch: pr.branches?.source, score: words.filter((word) => `${pr.title} ${pr.repository.name}`.toLowerCase().includes(word)).length })).sort((a, b) => b.score - a.score).slice(0, 8);
+    byId("workspace-results").innerHTML = options.length ? options.map((item, index) => `<label class="workspace-option"><input type="radio" name="workspace" value="${index}"><b>${esc(item.title)}</b><small>${esc(item.name)} · PR #${item.prNumber}</small></label>`).join("") : '<span style="color:#777;font-size:12px">No active pull requests found. Start a clean repository below.</span>';
+    for (const input of document.querySelectorAll('input[name="workspace"]')) input.onchange = () => { selectedWorkspace = options[Number(input.value)]; byId("create-session").disabled = false; };
+  } catch (error) { byId("workspace-results").innerHTML = `<span style="color:#888;font-size:12px">${esc(error.message)}. You can start a clean repository instead.</span>`; }
+}
+async function createSession(repository) {
+  const created = await json(await fetch("/v1/sessions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ title: byId("session-title").value, creatorRole: "swe", repository: { ...repository, remote: "github", defaultBranch: repository.defaultBranch ?? "main" } }) }));
+  history.replaceState(null, "", new URL(created.creatorUrl).hash); dialog.close(); await connect(fromHash());
+}
+byId("new-session").onclick = () => { selectedWorkspace = null; byId("create-session").disabled = true; dialog.showModal(); discoverWorkspaces(); }; byId("close-sheet").onclick = () => dialog.close();
+let discoveryTimer; byId("session-title").oninput = () => { clearTimeout(discoveryTimer); discoveryTimer = setTimeout(discoverWorkspaces, 350); };
+byId("create-repo").onclick = async () => { const title = byId("session-title").value.trim(); if (!title) return byId("session-title").focus(); const name = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 70) || "relay-workspace"; byId("create-repo").disabled = true; try { const repo = await json(await fetch("/v1/integrations/github/repositories", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name, description: title }) })); await createSession({ name: repo.name, prNumber: null, defaultBranch: repo.defaultBranch }); } catch (e) { byId("session-error").textContent = e.message; } finally { byId("create-repo").disabled = false; } };
+byId("session-form").onsubmit = async (event) => { event.preventDefault(); if (!selectedWorkspace) return; byId("create-session").disabled = true; try { await createSession(selectedWorkspace); } catch (e) { byId("session-error").textContent = e.message; } finally { byId("create-session").disabled = false; } };
 window.addEventListener("hashchange", () => { const next = fromHash(); if (next && next.id !== active?.id) connect(next).catch((e) => status(e.message)); });
 
 try { const [health, memory] = await Promise.all([json(await fetch("/health")), json(await fetch("/v1/integrations/claude-mem/status")).catch(() => ({ connected: false }))]); claudeMemReady = memory.connected; byId("sail-pill").textContent = health.workPod.provider === "sail" ? "Sail · ready" : "Local · ready"; byId("memory-pill").textContent = memory.connected ? "Claude-Mem · listening" : "Claude-Mem · optional"; } catch { status("Relay is offline."); }
-renderSessions(); const initial = fromHash(); if (initial) connect(initial).catch((e) => { status(e.message); dialog.showModal(); }); else dialog.showModal();
+renderSessions(); const initial = fromHash(); if (initial) connect(initial).catch((e) => { status(e.message); dialog.showModal(); discoverWorkspaces(); }); else { dialog.showModal(); discoverWorkspaces(); }

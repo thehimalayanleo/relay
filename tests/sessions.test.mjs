@@ -14,6 +14,13 @@ async function fixture({ greptileClient, now } = {}) {
 
 const repository = { name: "thehimalayanleo/relay", prNumber: 7, defaultBranch: "main" };
 
+test("a new GitHub repository can start before its first pull request", async () => {
+  const { service } = await fixture();
+  const created = await service.create({ title: "Start clean", repository: { name: "acme/new-work", prNumber: null } });
+  assert.equal(created.record.repository.name, "acme/new-work");
+  assert.equal(created.record.repository.prNumber, null);
+});
+
 test("session capabilities are hashed, private on disk, and survive restart", async () => {
   const { root, store, service } = await fixture();
   const created = await service.create({ title: "Ship shared sessions", repository });
