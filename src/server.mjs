@@ -215,7 +215,7 @@ export async function createRelayServer(options = {}) {
       if (["GET", "HEAD"].includes(request.method) && staticFiles.has(url.pathname)) {
         const [file, contentType] = staticFiles.get(url.pathname);
         const body = await readFile(path.join(publicRoot, file));
-        response.writeHead(200, { "content-type": contentType, "cache-control": "no-cache" });
+        response.writeHead(200, { "content-type": contentType, "cache-control": "no-store" });
         response.end(request.method === "HEAD" ? undefined : body);
         return;
       }
