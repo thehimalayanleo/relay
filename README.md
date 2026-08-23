@@ -105,10 +105,10 @@ Requires Node.js 20 or newer.
 Public one-command CLI install:
 
 ```bash
-npm install -g https://github.com/thehimalayanleo/relay/archive/refs/heads/main.tar.gz
+brew install thehimalayanleo/relay/relay
 ```
 
-No GitHub login or repository token is required. Then run `relay serve` and open `http://127.0.0.1:4317/demo/greptile?role=pm`.
+The public tap lives at [thehimalayanleo/homebrew-relay](https://github.com/thehimalayanleo/homebrew-relay). No GitHub login or repository token is required. Then run `relay serve` and open `http://127.0.0.1:4317/demo/greptile?role=pm`.
 
 For optional backend integrations, run `relay configure` once. It prompts silently for Sail and Greptile keys and saves them locally with mode `0600`. Claude-Mem is auto-detected and remains optional.
 

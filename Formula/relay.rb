@@ -1,8 +1,10 @@
 class Relay < Formula
   desc "Carry active work between people and AI agents"
   homepage "https://github.com/thehimalayanleo/relay"
-  url "https://github.com/thehimalayanleo/relay.git",
-      tag: "v0.1.0"
+  url "https://github.com/thehimalayanleo/relay/archive/cd57a34a98e840acacca006e45e0bd99fe2e3191.tar.gz"
+  version "0.1.0"
+  sha256 "3fd99fb5bf9eb5f1e7a1d261df0ad00240be1e7b43da69c94da40146b56ee181"
+  license "MIT"
 
   depends_on "node"
 
@@ -18,7 +20,7 @@ class Relay < Formula
     log_path var/"log/relay.log"
     error_log_path var/"log/relay.log"
     environment_variables RELAY_DATA_DIR: var/"relay/data",
-                          RELAY_POD_DIR: var/"relay/pods"
+                          RELAY_POD_DIR:  var/"relay/pods"
   end
 
   def caveats

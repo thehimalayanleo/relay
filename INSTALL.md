@@ -7,10 +7,10 @@ Relay includes a command-line tool, a small macOS button, and an optional backgr
 Requires Node.js 20 or newer. No GitHub account or repository token is required:
 
 ```sh
-npm install -g https://github.com/thehimalayanleo/relay/archive/refs/heads/main.tar.gz
+brew install thehimalayanleo/relay/relay
 ```
 
-Then start the local dashboard with `relay serve`. OpenCode is optional and needed only for autonomous continuation.
+Homebrew installs Node when needed. No GitHub account or repository token is required. Then start the local dashboard with `relay serve`. OpenCode is optional and needed only for autonomous continuation.
 
 ## Two-minute setup
 
