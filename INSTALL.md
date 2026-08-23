@@ -12,6 +12,17 @@ npm install -g https://github.com/thehimalayanleo/relay/archive/refs/heads/main.
 
 Then start the local dashboard with `relay serve`. OpenCode is optional and needed only for autonomous continuation.
 
+## Two-minute setup
+
+```sh
+relay configure
+relay serve
+```
+
+`relay configure` asks for Sail and Greptile keys without echoing them and stores them at `~/.config/relay/config.json` with file mode `0600`. Press Enter for either key to run without that optional integration. Claude-Mem is detected automatically when its local worker is installed and running.
+
+Relay prints separate PM and SWE dashboard URLs on startup. A second Mac can use the same Relay server only when it is reachable over a trusted network; do not expose this account-free prototype directly to the public internet.
+
 ## Start Relay with Ox Alpha
 
 OpenCode must already be signed in on the laptop. No additional model key is required.

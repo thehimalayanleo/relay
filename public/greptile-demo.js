@@ -127,16 +127,20 @@ async function health() {
     byId("box-a-state").textContent = sail ? "Sailbox · paused" : "Local pod · ready";
     byId("box-b-state").textContent = sail ? "Sailbox · on demand" : "Local pod · on demand";
     byId("agent").disabled = !agentAvailable;
-    const live = await json(await fetch("/v1/integrations/greptile/status"));
-    byId("greptile-state").textContent = live.liveApiConnected ? "Greptile: connected" : "Greptile: offline";
-    const memory = await json(await fetch("/v1/integrations/claude-mem/status"));
+    const [greptileResult, memoryResult] = await Promise.allSettled([
+      json(await fetch("/v1/integrations/greptile/status")),
+      json(await fetch("/v1/integrations/claude-mem/status")),
+    ]);
+    const live = greptileResult.status === "fulfilled" ? greptileResult.value : { liveApiConnected: false };
+    const memory = memoryResult.status === "fulfilled" ? memoryResult.value : { connected: false };
+    byId("greptile-state").textContent = live.liveApiConnected ? "Greptile: connected" : "Greptile: optional";
     claudeMemReady = memory.connected;
     memoryButton.textContent = memory.connected ? `Claude-Mem ${memory.version} · pull context` : "Claude-Mem offline";
     memoryButton.disabled = !memory.connected;
-    memoryState.textContent = memory.connected ? `Claude-Mem ${memory.version} · listening` : "Claude-Mem · offline";
+    memoryState.textContent = memory.connected ? `Claude-Mem ${memory.version} · listening` : "Claude-Mem · optional";
     memoryState.style.color = memory.connected ? "var(--green)" : "var(--muted)";
     if (memory.connected) syncClaudeMemory({ silent: true });
-    byId("truth").textContent = `Relay: live · Claude-Mem: ${memory.connected ? "ready" : "offline"} · Workspace: ${sail ? "Sail" : "local"} · Greptile: ${live.liveApiConnected ? "connected" : "offline"}`;
+    byId("truth").textContent = `Relay: live · Claude-Mem: ${memory.connected ? "ready" : "optional"} · Workspace: ${sail ? "Sail" : "local"} · Greptile: ${live.liveApiConnected ? "connected" : "optional"}`;
   } catch (error) {
     byId("provider").textContent = "Offline";
     byId("truth").textContent = error.message;

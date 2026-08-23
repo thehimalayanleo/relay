@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 import { readFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 
 function usage() {
   console.log(`Relay CLI
@@ -8,6 +11,7 @@ Portable human-agent handoffs for shells and agent harnesses.
 
 Usage:
   relay serve [--host HOST] [--port PORT]
+  relay configure
   relay doctor [--server URL]
   relay handoff [notes.txt|-] --goal TEXT --next TEXT [--to TARGET] [--from HARNESS] [--pod] [--quiet]
   relay create <capsule.json> [--pod] [--ttl HOURS] [--quiet] [--server URL]
@@ -27,6 +31,66 @@ Agent-friendly examples:
 
 All structured commands write JSON to stdout. Errors go to stderr and use a nonzero exit code.
 `);
+}
+
+const configPath = process.env.RELAY_CONFIG_PATH
+  ?? path.join(os.homedir(), ".config", "relay", "config.json");
+
+async function loadSavedConfig() {
+  try {
+    const saved = JSON.parse(await readFile(configPath, "utf8"));
+    for (const name of ["SAIL_API_KEY", "GREPTILE_API_KEY"]) {
+      if (!process.env[name] && typeof saved[name] === "string" && saved[name]) process.env[name] = saved[name];
+    }
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+}
+
+function promptSecret(label) {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) throw new Error("configure requires an interactive terminal.");
+  return new Promise((resolve, reject) => {
+    let value = "";
+    const stdin = process.stdin;
+    const cleanup = () => {
+      stdin.off("data", onData);
+      stdin.setRawMode(false);
+      stdin.pause();
+      process.stdout.write("\n");
+    };
+    const onData = (chunk) => {
+      for (const byte of chunk) {
+        if (byte === 3) {
+          cleanup();
+          reject(new Error("Configuration cancelled."));
+          return;
+        }
+        if (byte === 13 || byte === 10) {
+          cleanup();
+          resolve(value.trim());
+          return;
+        }
+        if (byte === 127 || byte === 8) value = value.slice(0, -1);
+        else value += String.fromCharCode(byte);
+      }
+    };
+    process.stdout.write(label);
+    stdin.setRawMode(true);
+    stdin.resume();
+    stdin.on("data", onData);
+  });
+}
+
+async function configure() {
+  console.log("Relay stores keys locally with mode 0600. Press Enter to leave an integration disabled.");
+  const sail = process.env.SAIL_API_KEY ?? await promptSecret("Sail API key: ");
+  const greptile = process.env.GREPTILE_API_KEY ?? await promptSecret("Greptile API key: ");
+  const config = {};
+  if (sail) config.SAIL_API_KEY = sail;
+  if (greptile) config.GREPTILE_API_KEY = greptile;
+  await mkdir(path.dirname(configPath), { recursive: true, mode: 0o700 });
+  await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
+  console.log(`Saved ${Object.keys(config).length} integration key(s) to ${configPath}.`);
 }
 
 function option(name, fallback = "") {
@@ -125,6 +189,7 @@ async function main() {
   }
 
   if (command === "serve") {
+    await loadSavedConfig();
     const { createRelayServer } = await import("../src/server.mjs");
     const host = option("--host", process.env.HOST ?? "127.0.0.1");
     const port = Number(option("--port", process.env.PORT ?? "4317"));
@@ -135,6 +200,13 @@ async function main() {
       service.listen(port, host, resolve);
     });
     console.log(`Relay listening at http://${host}:${port}`);
+    console.log(`PM dashboard: http://${host}:${port}/demo/greptile?role=pm`);
+    console.log(`SWE dashboard: http://${host}:${port}/demo/greptile?role=swe`);
+    return;
+  }
+
+  if (command === "configure") {
+    await configure();
     return;
   }
 
