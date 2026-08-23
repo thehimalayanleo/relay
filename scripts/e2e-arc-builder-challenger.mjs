@@ -29,9 +29,11 @@ const [builderPrompt, challengerPrompt] = await Promise.all([
   readFile(new URL("../examples/arc-user1-builder.md", import.meta.url), "utf8"),
   readFile(new URL("../examples/arc-user2-challenger.md", import.meta.url), "utf8"),
 ]);
+const repositoryName = process.env.RELAY_SESSION_REPO ?? "savepoint-demo";
+const repositoryPr = Number(process.env.RELAY_SESSION_PR ?? 0) || null;
 const created = await request("/v1/sessions", {
   method: "POST", headers: { "content-type": "application/json" },
-  body: JSON.stringify({ title: "ARC-AGI-3 builder and challenger", creatorRole: "swe", repository: { name: "savepoint-demo", prNumber: null } }),
+  body: JSON.stringify({ title: "ARC-AGI-3 builder and challenger", creatorRole: "swe", repository: { name: repositoryName, prNumber: repositoryPr } }),
 });
 const headers = { authorization: `Bearer ${created.token}`, "content-type": "application/json" };
 for (const participant of [{ id: "user-1", name: "Ajinkya", role: "Primary builder" }, { id: "user-2", name: "Sanjana", role: "Independent challenger" }]) {
@@ -42,8 +44,8 @@ await request(`/v1/sessions/${created.id}/brief`, { method: "POST", headers, bod
 await request(`/v1/sessions/${created.id}/brief`, { method: "POST", headers, body: JSON.stringify({ actor: "Sanjana", actorId: "user-2", field: "implementation", value: "Return a structured challenger handoff. The primary builder must independently replay and deduplicate any candidate before promotion." }) });
 
 const checkpoint = await request(`/v1/sessions/${created.id}/checkpoints`, { method: "POST", headers, body: JSON.stringify({ actor: "Sanjana · independent challenger" }) });
-const run = (requestedBy) => request(`/v1/sessions/${created.id}/agent/run`, { method: "POST", headers, body: JSON.stringify({ target: "opencode", requestedBy, demo: true }) });
-await Promise.all([run("User 1 · primary builder"), run("User 2 · independent challenger")]);
+const run = (requestedBy, instructions) => request(`/v1/sessions/${created.id}/agent/run`, { method: "POST", headers, body: JSON.stringify({ target: "opencode", requestedBy, instructions }) });
+await Promise.all([run("User 1 · primary builder", builderPrompt), run("User 2 · independent challenger", challengerPrompt)]);
 const session = await request(`/v1/sessions/${created.id}`, { headers });
 const runs = session.agentRuns.slice(-2);
 const sailboxes = new Set(runs.map((item) => item.sailboxId));

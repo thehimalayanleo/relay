@@ -31,6 +31,7 @@ export class ConfiguredAgentRunner {
     this.harness = options.harness ?? process.env.RELAY_AGENT_HARNESS ?? "configured-agent";
     this.timeoutMs = options.timeoutMs ?? Number(process.env.RELAY_AGENT_TIMEOUT_MS ?? 900_000);
     this.spawnImpl = options.spawnImpl ?? spawn;
+    this.cwd = options.cwd ?? process.env.RELAY_AGENT_CWD ?? undefined;
   }
 
   status() {
@@ -49,6 +50,7 @@ export class ConfiguredAgentRunner {
     }
     const started = Date.now();
     const child = this.spawnImpl(this.argv[0], this.argv.slice(1), {
+      cwd: this.cwd,
       env: {
         ...process.env,
         RELAY_AGENT_REQUESTED_BY: String(context.requestedBy ?? ""),

@@ -406,9 +406,11 @@ export async function createRelayServer(options = {}) {
         const target = typeof body.target === "string" ? body.target : "generic";
         if (!SUPPORTED_TARGETS.includes(target)) throw new Error(`Unsupported target: ${target}`);
         const rendered = renderPrompt(record, target);
-        const prompt = body.demo === true
+        const roleInstructions = typeof body.instructions === "string" ? body.instructions.trim().slice(0, 20_000) : "";
+        const basePrompt = body.demo === true
           ? `${rendered}\n\nStage demonstration: do not inspect files or use tools. In no more than three short sentences, state the problem, constraint, and next action you inherited.`
           : rendered;
+        const prompt = roleInstructions ? `${basePrompt}\n\nRole-specific instructions:\n${roleInstructions}` : basePrompt;
         const output = await agentQueue.enqueue(session.id, {
           target, requestedBy: typeof body.requestedBy === "string" ? body.requestedBy : "session-api",
         }, async (queueJob) => {
