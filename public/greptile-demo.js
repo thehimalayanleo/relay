@@ -46,7 +46,7 @@ function render(next) {
   byId("runs").innerHTML = runs.length ? runs.map((run) => `<div class="run"><b>${esc(run.requestedBy)}</b><br>${esc(run.openCodeSessionId ?? run.id.slice(0, 8))} · ${esc(run.sailboxId ?? "local")}</div>`).join("") : '<div class="run">No agent runs yet.</div>';
   byId("two-agents").disabled = snapshot.checkpoints.length === 0;
   byId("agent").disabled = snapshot.checkpoints.length === 0;
-  byId("host-mode").innerHTML = active.role === "pm" ? '<span class="tiny-dot"></span>Connected as Sanjana' : '<span class="tiny-dot"></span>Host integrations ready';
+  byId("host-mode").textContent = active.role === "pm" ? "Connected as Sanjana" : "Host integrations ready";
   byId("host-help").textContent = active.role === "pm" ? "No local keys required" : "Powered by host integrations";
   renderFeed(snapshot.activity ?? []); renderMetrics(); remember();
   clearTimeout(memoryTimer); memoryTimer = setTimeout(recallMemory, 900);
