@@ -102,6 +102,14 @@ See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the stack, integration boundary, 
 
 Requires Node.js 20 or newer.
 
+Public one-command CLI install:
+
+```bash
+npm install -g https://github.com/thehimalayanleo/relay/archive/refs/heads/main.tar.gz
+```
+
+No GitHub login or repository token is required. Then run `relay serve` and open `http://127.0.0.1:4317/demo/greptile?role=pm`.
+
 ```bash
 cd relay
 npm test

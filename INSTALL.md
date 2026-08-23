@@ -2,36 +2,15 @@
 
 Relay includes a command-line tool, a small macOS button, and an optional background agent.
 
-## Fastest install from the two files
+## One-command public install
 
-Send these two files to the other Mac:
+Requires Node.js 20 or newer. No GitHub account or repository token is required:
 
-- `relay-handoff-0.1.0.tgz`
-- `Relay-macOS.zip`
-
-Then run from the folder containing them:
-
-```bash
-npm install -g ./relay-handoff-0.1.0.tgz
-ditto -x -k Relay-macOS.zip .
-mv Relay.app /Applications/
-relay --help
-open -a Relay
+```sh
+npm install -g https://github.com/thehimalayanleo/relay/archive/refs/heads/main.tar.gz
 ```
 
-The recipient needs Node.js 20 or newer. OpenCode is needed only for the background-agent button.
-
-## Install from the private repository
-
-The recipient needs access to `thehimalayanleo/relay`, Homebrew, and GitHub CLI.
-
-```bash
-gh auth login
-gh auth setup-git
-brew tap thehimalayanleo/relay https://github.com/thehimalayanleo/relay.git
-brew install thehimalayanleo/relay/relay
-relay doctor
-```
+Then start the local dashboard with `relay serve`. OpenCode is optional and needed only for autonomous continuation.
 
 ## Start Relay with Ox Alpha
 
@@ -47,17 +26,9 @@ Open `http://127.0.0.1:4317/demo/greptile`. The page shows when the active inves
 
 The browser can ask the preconfigured agent to continue a Relay handoff. It cannot choose a command or enable automatic permissions.
 
-## Install the macOS button
+## macOS button
 
-The private release requires a temporary GitHub token for Homebrew to download it:
-
-```bash
-HOMEBREW_GITHUB_API_TOKEN="$(gh auth token)" \
-  brew install --cask thehimalayanleo/relay/relay
-open -a Relay
-```
-
-This preview is ad-hoc signed, not notarized. On first launch, Control-click Relay in Finder and choose **Open**.
+The CLI and web dashboard are the supported public install today. The native button can be built from source with the steps below. A one-command cask requires a notarized release artifact and is not claimed yet.
 
 ## Build locally instead
 
@@ -77,4 +48,4 @@ Release output:
 - `dist/Relay-macOS.zip`
 - `dist/SHA256SUMS.txt`
 
-The Homebrew install will work after those artifacts are attached to the private `v0.1.0` GitHub release.
+The Homebrew cask will work after those artifacts are attached to the public `v0.1.0` GitHub release and the app is notarized.

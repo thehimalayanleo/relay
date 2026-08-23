@@ -4,6 +4,9 @@ let agentAvailable = false;
 let contextDrop = null;
 let currentArcRun = null;
 let claudeMemContext = null;
+let claudeMemReady = false;
+let lastMemoryQuery = "";
+let memorySyncTimer;
 byId("truth").setAttribute("aria-live", "polite");
 byId("provider").setAttribute("aria-live", "polite");
 byId("agent").title = "Seal Agent 1's checkpoint first.";
@@ -27,6 +30,11 @@ const me = roleParam === "pm"
   : { id: "ajinkya-swe", name: "Ajinkya", role: "SWE", color: "#7aa2f7" };
 const liveRoom = byId("live-room");
 liveRoom.innerHTML = `<div class="live-head"><strong>One shared brief</strong><small><span class="pulse"></span>SYNCED</small></div><div class="presence" id="presence"></div><div class="live-fields"><label>Customer problem<textarea data-field="problem"></textarea></label><label>PM constraint<textarea data-field="constraint"></textarea></label><label>Acceptance criteria<textarea data-field="acceptance"></textarea></label><label>Implementation<textarea data-field="implementation"></textarea></label></div><div class="live-foot"><span id="room-role">You are ${me.name} · ${me.role}</span><span id="room-version">v0</span></div>`;
+const memoryState = document.createElement("span");
+memoryState.id = "memory-state";
+memoryState.textContent = "Claude-Mem · connecting";
+memoryState.style.color = "var(--muted)";
+liveRoom.querySelector(".live-head").append(memoryState);
 let roomSnapshot;
 let liveTimer;
 
@@ -42,6 +50,8 @@ function renderRoom(snapshot) {
     byId("log").dataset.lastLiveEvent = latest.id;
     addLog(`${latest.actor} ${latest.detail} · shared v${latest.version}`);
   }
+  clearTimeout(memorySyncTimer);
+  memorySyncTimer = setTimeout(() => syncClaudeMemory({ silent: true }), 700);
 }
 
 async function joinRoom() {
@@ -120,8 +130,12 @@ async function health() {
     const live = await json(await fetch("/v1/integrations/greptile/status"));
     byId("greptile-state").textContent = live.liveApiConnected ? "Greptile: connected" : "Greptile: offline";
     const memory = await json(await fetch("/v1/integrations/claude-mem/status"));
+    claudeMemReady = memory.connected;
     memoryButton.textContent = memory.connected ? `Claude-Mem ${memory.version} · pull context` : "Claude-Mem offline";
     memoryButton.disabled = !memory.connected;
+    memoryState.textContent = memory.connected ? `Claude-Mem ${memory.version} · listening` : "Claude-Mem · offline";
+    memoryState.style.color = memory.connected ? "var(--green)" : "var(--muted)";
+    if (memory.connected) syncClaudeMemory({ silent: true });
     byId("truth").textContent = `Relay: live · Claude-Mem: ${memory.connected ? "ready" : "offline"} · Workspace: ${sail ? "Sail" : "local"} · Greptile: ${live.liveApiConnected ? "connected" : "offline"}`;
   } catch (error) {
     byId("provider").textContent = "Offline";
@@ -278,28 +292,39 @@ byId("relay").addEventListener("click", async () => {
   }
 });
 
-memoryButton.addEventListener("click", async () => {
-  memoryButton.disabled = true;
-  memoryButton.textContent = "Searching Claude-Mem…";
+async function syncClaudeMemory({ silent = false, force = false } = {}) {
+  if (!claudeMemReady || !roomSnapshot) return;
+  const query = [roomSnapshot.brief.problem, roomSnapshot.brief.implementation].filter(Boolean).join(" ");
+  if (!force && query === lastMemoryQuery) return;
+  lastMemoryQuery = query;
+  if (!silent) memoryButton.disabled = true;
+  memoryButton.textContent = "Claude-Mem · recalling…";
+  memoryState.textContent = "Claude-Mem · recalling";
   try {
-    const query = [roomSnapshot?.brief.problem, roomSnapshot?.brief.implementation].filter(Boolean).join(" ");
     claudeMemContext = await json(await fetch("/v1/integrations/claude-mem/search", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ query, project: "relay", limit: 8 }),
     }));
     const count = claudeMemContext.observationIds.length;
-    memoryButton.textContent = count ? `${count} Claude-Mem observations attached` : "Claude-Mem ready · no prior Relay memory";
-    byId("truth").textContent = count
+    memoryButton.textContent = count ? `Claude-Mem · ${count} memories ready` : "Claude-Mem · listening";
+    memoryState.textContent = count ? `Claude-Mem · ${count} recalled` : "Claude-Mem · listening";
+    if (!silent) byId("truth").textContent = count
       ? `Claude-Mem supplied ${count} cited observations. Relay will seal and transfer them.`
-      : "Claude-Mem is connected. This new Relay project has no indexed observations yet.";
+      : "Claude-Mem is connected and will supply memory when relevant observations appear.";
     await recordRoomActivity("memory", count ? `attached ${count} Claude-Mem observations` : "checked Claude-Mem; no prior Relay observations", "Claude-Mem");
   } catch (error) {
     memoryButton.textContent = "Claude-Mem unavailable · retry";
-    byId("truth").textContent = error.message;
+    memoryState.textContent = "Claude-Mem · reconnecting";
+    lastMemoryQuery = "";
+    if (!silent) byId("truth").textContent = error.message;
   } finally {
     memoryButton.disabled = false;
   }
+}
+
+memoryButton.addEventListener("click", async () => {
+  await syncClaudeMemory({ force: true });
 });
 
 byId("agent").addEventListener("click", async () => {
