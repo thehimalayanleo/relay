@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "description": "Verified investigation handoffs between human-agent work loops.",
+  "license": "MIT",
   "keywords": [
     "agents",
     "handoff",
