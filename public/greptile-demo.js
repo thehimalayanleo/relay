@@ -7,6 +7,7 @@ let discoveredWorkspaces = null;
 const syncedSessions = new Set();
 
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[c]));
+const cleanLabel = (value) => String(value ?? "Agent").replace(/^\*\*|\*\*$/g, "").replace(/^\\+|\\+$/g, "").trim();
 async function json(response) { const body = await response.json(); if (!response.ok) throw new Error(body.message ?? body.error ?? `HTTP ${response.status}`); return body; }
 const authHeaders = (extra = {}) => ({ authorization: `Bearer ${active.token}`, ...extra });
 function fromHash() { const p = new URLSearchParams(location.hash.slice(1)); const role = ["pm", "collaborator"].includes(p.get("role")) ? p.get("role") : "swe"; return p.get("session") && p.get("token") ? { id: p.get("session"), token: p.get("token"), role } : null; }
@@ -29,15 +30,17 @@ function renderSessions() {
 }
 
 function renderFeed() {
-  const exactRuns = (snapshot.agentRuns ?? []).filter((run) => run.exitCode === 0 && run.response && run.response !== "OpenCode completed with no text response.");
-  const runs = exactRuns.length ? exactRuns.slice(-1) : (snapshot.agentRuns ?? []).slice(-1);
+  const exactRuns = (snapshot.agentRuns ?? []).filter((run) => run.exitCode === 0 && run.inheritedContext && run.response && run.response !== "OpenCode completed with no text response.");
+  const latestByParticipant = new Map();
+  for (const run of exactRuns) latestByParticipant.set(cleanLabel(run.requestedBy), run);
+  const runs = [...latestByParticipant.values()].sort((a, b) => new Date(a.completedAt) - new Date(b.completedAt));
   const collaboratorEdit = [...(snapshot.activity ?? [])].reverse().find((event) => ["chat", "edit"].includes(event.type) && event.actor === "Sanjana");
   const editHtml = collaboratorEdit ? `<article class="event"><div class="avatar">S</div><div class="bubble"><strong>Sanjana · SWE</strong><time>${new Date(collaboratorEdit.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time><span class="inherited">Added to the shared agent stack</span><div class="agent-response">${esc(collaboratorEdit.value || collaboratorEdit.detail || snapshot.brief.implementation)}</div></div></article>` : "";
   if (runs.length) {
     byId("feed").innerHTML = editHtml + runs.map((run) => {
-      const inherited = run.inheritedContext ? `Inherited: ${run.inheritedContext.problem} Constraint: ${run.inheritedContext.constraint} Next: ${run.inheritedContext.nextAction}` : "This legacy run did not retain its prompt text.";
-      const response = run.response || "This legacy run completed successfully, but its exact response was not retained. New runs preserve the full wording here.";
-      return `<article class="event"><div class="avatar">${esc((run.requestedBy || "A")[0])}</div><div class="bubble"><strong>${esc(run.requestedBy || "Agent")}</strong><time>${new Date(run.completedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time><span class="inherited">${esc(inherited)}</span><div class="agent-response">${esc(response)}</div></div></article>`;
+      const participant = cleanLabel(run.requestedBy);
+      const inherited = `Inherited: ${run.inheritedContext.problem} Constraint: ${run.inheritedContext.constraint} Next: ${run.inheritedContext.nextAction}`;
+      return `<article class="event"><div class="avatar">${esc(participant[0])}</div><div class="bubble"><strong>${esc(participant)}</strong><time>${new Date(run.completedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time><span class="inherited">${esc(inherited)}</span><div class="agent-response">${esc(run.response)}</div></div></article>`;
     }).join("");
     return;
   }
