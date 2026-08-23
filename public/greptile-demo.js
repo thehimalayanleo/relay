@@ -84,7 +84,7 @@ async function recallMemory() {
 }
 
 function openDrawer(title = "Shared brief") { byId("drawer-title").textContent = title; byId("drawer").hidden = false; }
-for (const id of ["open-brief", "open-memory", "open-runs", "memory-pill", "greptile-pill", "sail-pill"]) byId(id).onclick = () => openDrawer(id.includes("brief") ? "Shared brief" : "Memory & runs");
+for (const id of ["open-runs", "memory-pill", "greptile-pill", "sail-pill"]) byId(id).onclick = () => openDrawer("Session details");
 byId("close-drawer").onclick = () => { byId("drawer").hidden = true; };
 
 byId("invite-session").onclick = async () => { if (!snapshot) return; await navigator.clipboard.writeText(snapshot.links?.pmInviteUrl ?? active.inviteUrl); status("Invite copied. Sanjana only needs the link."); };
