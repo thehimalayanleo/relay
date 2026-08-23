@@ -69,16 +69,31 @@ export class CollaborationHub {
     if (!Object.hasOwn(room.brief, field)) throw new Error(`Unknown shared field: ${field}`);
     const value = cleanText(body.value);
     const actor = cleanText(body.actor, 80) || "Collaborator";
+    const actorId = cleanText(body.actorId, 100);
+    if (actorId && room.participants.has(actorId)) {
+      const person = room.participants.get(actorId);
+      room.participants.set(actorId, {
+        ...person,
+        activeField: field,
+        lastSeenAt: this.now().toISOString(),
+      });
+    }
     room.brief = { ...room.brief, [field]: value };
     room.version += 1;
-    room.activity.push({
+    const previous = room.activity.at(-1);
+    const event = {
       id: randomUUID(),
       type: "edit",
       actor,
       detail: `updated ${field}`,
       at: this.now().toISOString(),
       version: room.version,
-    });
+    };
+    if (previous?.type === "edit" && previous.actor === actor && previous.detail === event.detail) {
+      room.activity[room.activity.length - 1] = event;
+    } else {
+      room.activity.push(event);
+    }
     this.broadcast(room, "workspace");
     return this.snapshot(room);
   }
@@ -112,4 +127,3 @@ export class CollaborationHub {
     }
   }
 }
-

@@ -28,7 +28,7 @@ let liveTimer;
 function renderRoom(snapshot) {
   roomSnapshot = snapshot;
   byId("room-version").textContent = `v${snapshot.version}`;
-  byId("presence").innerHTML = snapshot.participants.map((person) => `<div class="avatar" style="background:${person.color}" title="${person.name} · ${person.role}">${person.name[0]}</div><span>${person.name} · ${person.role}</span>`).join("");
+  byId("presence").innerHTML = snapshot.participants.map((person) => `<div class="avatar" style="background:${person.color};${person.activeField ? `box-shadow:0 0 0 2px #101112,0 0 0 3px ${person.color}` : ""}" title="${person.name} · ${person.role}">${person.name[0]}</div><span>${person.name}${person.activeField ? ` is editing ${person.activeField}…` : ` · ${person.role}`}</span>`).join("");
   for (const textarea of liveRoom.querySelectorAll("textarea")) {
     if (document.activeElement !== textarea) textarea.value = snapshot.brief[textarea.dataset.field] ?? "";
   }
@@ -47,8 +47,8 @@ for (const textarea of liveRoom.querySelectorAll("textarea")) {
   textarea.addEventListener("input", () => {
     clearTimeout(liveTimer);
     liveTimer = setTimeout(async () => {
-      renderRoom(await json(await fetch(`/v1/rooms/${roomId}/brief`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ actor: me.name, field: textarea.dataset.field, value: textarea.value }) })));
-    }, 180);
+      renderRoom(await json(await fetch(`/v1/rooms/${roomId}/brief`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ actor: me.name, actorId: me.id, field: textarea.dataset.field, value: textarea.value }) })));
+    }, 45);
   });
 }
 
