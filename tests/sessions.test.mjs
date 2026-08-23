@@ -35,6 +35,7 @@ test("sessions are isolated and persist versioned edits", async () => {
   assert.equal((await service.get(first.record.id, first.token)).version, 1);
   assert.equal((await service.get(second.record.id, second.token)).version, 0);
   assert.equal((await store.get(first.record.id)).brief.implementation, "Queue one agent");
+  await assert.rejects(service.get(second.record.id, first.token), { code: "FORBIDDEN" });
 });
 
 test("Greptile metrics close only findings first observed open", async () => {

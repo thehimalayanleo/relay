@@ -18,6 +18,7 @@ import { CollaborationHub } from "./collaboration.mjs";
 import { ClaudeMemClient } from "./claude-mem.mjs";
 import { AgentRunQueue } from "./agent-queue.mjs";
 import { SessionFileStore, SessionService } from "./sessions.mjs";
+import { allowedRequestOrigin, publicOrigin, sessionLinks, SessionRateLimiter } from "./host-security.mjs";
 
 const sourceDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.dirname(sourceDir);
@@ -60,12 +61,13 @@ function sendError(response, error) {
     GREPTILE_MCP_ERROR: 502,
     GREPTILE_TOOL_ERROR: 502,
     CLAUDE_MEM_UNAVAILABLE: 503,
+    RATE_LIMITED: 429,
   };
   sendJson(response, statusByCode[error.code] ?? 400, {
     error: error.code ?? "BAD_REQUEST",
     message: error.message,
     ...(error.matches ? { matches: error.matches } : {}),
-  });
+  }, error.retryAfter ? { "retry-after": String(error.retryAfter) } : {});
 }
 
 async function readJson(request, limit = 1_000_000) {
@@ -90,6 +92,15 @@ function externalOrigin(request, url) {
   const protocol = request.headers["x-forwarded-proto"] ?? url.protocol.replace(":", "");
   const host = request.headers["x-forwarded-host"] ?? request.headers.host;
   return `${protocol}://${host}`;
+}
+
+function hostStatus({ workPodProvider, greptileClient, claudeMem, agentRunner }) {
+  return {
+    sail: { configured: workPodProvider.status().provider === "sail" && workPodProvider.status().configured },
+    greptile: { configured: greptileClient.configured() },
+    claudeMem: { available: Boolean(claudeMem) },
+    model: { configured: agentRunner.status().configured, serialized: true },
+  };
 }
 
 function isLoopback(request) {
@@ -162,7 +173,8 @@ export async function createRelayServer(options = {}) {
   await workPodProvider.init();
   const agentRunner = options.agentRunner ?? new ConfiguredAgentRunner();
   const greptileClient = options.greptileClient ?? new GreptileMcpClient();
-  const corsOrigin = options.corsOrigin ?? process.env.RELAY_CORS_ORIGIN ?? "*";
+  const corsOrigin = options.corsOrigin ?? process.env.RELAY_CORS_ORIGIN ?? "";
+  const advertisedOrigin = publicOrigin(options.publicUrl ?? process.env.RELAY_PUBLIC_URL ?? "");
   const collaboration = options.collaboration ?? new CollaborationHub();
   const claudeMem = options.claudeMem ?? new ClaudeMemClient();
   const agentQueue = options.agentQueue ?? new AgentRunQueue();
@@ -172,10 +184,22 @@ export async function createRelayServer(options = {}) {
   ));
   await sessionStore.init();
   const sessions = options.sessions ?? new SessionService({ store: sessionStore, greptileClient });
+  const configuredRateLimit = Number(process.env.RELAY_SESSION_RATE_LIMIT ?? 600);
+  const sessionRateLimiter = options.sessionRateLimiter ?? new SessionRateLimiter({
+    limit: Number.isFinite(configuredRateLimit) && configuredRateLimit > 0 ? configuredRateLimit : 600,
+  });
 
   return createHttpServer(async (request, response) => {
     const url = new URL(request.url, `http://${request.headers.host ?? "localhost"}`);
-    response.setHeader("access-control-allow-origin", corsOrigin);
+    const originDecision = allowedRequestOrigin(request, url, corsOrigin, advertisedOrigin);
+    if (!originDecision.allowed) {
+      sendJson(response, 403, { error: "ORIGIN_FORBIDDEN", message: "Request origin is not allowed by this Relay host." });
+      return;
+    }
+    if (originDecision.responseOrigin) {
+      response.setHeader("access-control-allow-origin", originDecision.responseOrigin);
+      response.setHeader("vary", "Origin");
+    }
     response.setHeader("access-control-allow-headers", "content-type, authorization");
     response.setHeader("access-control-allow-methods", "GET, POST, OPTIONS");
     response.setHeader("x-content-type-options", "nosniff");
@@ -202,6 +226,7 @@ export async function createRelayServer(options = {}) {
           protocol: "relay/v1",
           workPod: workPodProvider.status(),
           autonomousAgent: agentRunner.status(),
+          hostIntegrations: hostStatus({ workPodProvider, greptileClient, claudeMem, agentRunner }),
           integrations: {
             greptile: {
               adapterSecretConfigured: Boolean(process.env.GREPTILE_RELAY_SECRET),
@@ -217,14 +242,18 @@ export async function createRelayServer(options = {}) {
       if (request.method === "POST" && url.pathname === "/v1/sessions") {
         const body = await readJson(request);
         const created = await sessions.create(body);
-        const origin = externalOrigin(request, url);
-        const fragment = `session=${encodeURIComponent(created.record.id)}&token=${encodeURIComponent(created.token)}`;
+        const hostOrigin = externalOrigin(request, url);
+        const inviteOrigin = advertisedOrigin || hostOrigin;
+        const links = sessionLinks({
+          id: created.record.id, token: created.token, hostOrigin, inviteOrigin,
+          creatorRole: body.creatorRole,
+        });
         sendJson(response, 201, {
           id: created.record.id,
           token: created.token,
           expiresAt: created.record.expiresAt,
-          creatorUrl: `${origin}/demo/greptile#${fragment}&role=${encodeURIComponent(body.creatorRole === "pm" ? "pm" : "swe")}`,
-          pmInviteUrl: `${origin}/demo/greptile#${fragment}&role=pm`,
+          ...links,
+          creatorUrl: links.hostWorkspaceUrl,
           snapshot: created.record,
         });
         return;
@@ -232,42 +261,59 @@ export async function createRelayServer(options = {}) {
 
       const sessionMatch = url.pathname.match(/^\/v1\/sessions\/([0-9a-f-]{36})$/i);
       if (request.method === "GET" && sessionMatch) {
-        sendJson(response, 200, await sessions.get(sessionMatch[1], requestToken(request, url)));
+        sessionRateLimiter.check(sessionMatch[1]);
+        const token = requestToken(request, url);
+        const session = await sessions.get(sessionMatch[1], token);
+        const hostOrigin = externalOrigin(request, url);
+        const inviteOrigin = advertisedOrigin || hostOrigin;
+        const links = sessionLinks({ id: session.id, token, hostOrigin, inviteOrigin });
+        sendJson(response, 200, {
+          ...session,
+          links,
+          hostIntegrations: hostStatus({ workPodProvider, greptileClient, claudeMem, agentRunner }),
+        });
         return;
       }
 
       const sessionEventsMatch = url.pathname.match(/^\/v1\/sessions\/([0-9a-f-]{36})\/events$/i);
       if (request.method === "GET" && sessionEventsMatch) {
+        sessionRateLimiter.check(sessionEventsMatch[1], 2);
+        const token = requestToken(request, url);
+        await sessions.get(sessionEventsMatch[1], token);
         response.writeHead(200, {
           "content-type": "text/event-stream; charset=utf-8",
           "cache-control": "no-cache, no-transform",
           connection: "keep-alive",
         });
-        const unsubscribe = await sessions.subscribe(sessionEventsMatch[1], requestToken(request, url), response);
+        const unsubscribe = await sessions.subscribe(sessionEventsMatch[1], token, response);
         request.on("close", unsubscribe);
         return;
       }
 
       const sessionJoinMatch = url.pathname.match(/^\/v1\/sessions\/([0-9a-f-]{36})\/join$/i);
       if (request.method === "POST" && sessionJoinMatch) {
+        sessionRateLimiter.check(sessionJoinMatch[1]);
         sendJson(response, 200, await sessions.join(sessionJoinMatch[1], requestToken(request, url), await readJson(request)));
         return;
       }
 
       const sessionBriefMatch = url.pathname.match(/^\/v1\/sessions\/([0-9a-f-]{36})\/brief$/i);
       if (request.method === "POST" && sessionBriefMatch) {
+        sessionRateLimiter.check(sessionBriefMatch[1]);
         sendJson(response, 200, await sessions.updateBrief(sessionBriefMatch[1], requestToken(request, url), await readJson(request)));
         return;
       }
 
       const sessionActivityMatch = url.pathname.match(/^\/v1\/sessions\/([0-9a-f-]{36})\/activity$/i);
       if (request.method === "POST" && sessionActivityMatch) {
+        sessionRateLimiter.check(sessionActivityMatch[1]);
         sendJson(response, 201, await sessions.addActivity(sessionActivityMatch[1], requestToken(request, url), await readJson(request)));
         return;
       }
 
       const sessionMemoryMatch = url.pathname.match(/^\/v1\/sessions\/([0-9a-f-]{36})\/memory$/i);
       if (request.method === "POST" && sessionMemoryMatch) {
+        sessionRateLimiter.check(sessionMemoryMatch[1], 2);
         const body = await readJson(request);
         sendJson(response, 200, await sessions.remember(sessionMemoryMatch[1], requestToken(request, url), body.observationIds));
         return;
@@ -275,25 +321,28 @@ export async function createRelayServer(options = {}) {
 
       const sessionMetricsMatch = url.pathname.match(/^\/v1\/sessions\/([0-9a-f-]{36})\/metrics$/i);
       if (request.method === "GET" && sessionMetricsMatch) {
+        sessionRateLimiter.check(sessionMetricsMatch[1]);
         sendJson(response, 200, await sessions.getMetrics(sessionMetricsMatch[1], requestToken(request, url)));
         return;
       }
 
       const sessionGreptileMatch = url.pathname.match(/^\/v1\/sessions\/([0-9a-f-]{36})\/greptile\/sync$/i);
       if (request.method === "POST" && sessionGreptileMatch) {
+        sessionRateLimiter.check(sessionGreptileMatch[1], 10);
         sendJson(response, 200, await sessions.syncGreptile(sessionGreptileMatch[1], requestToken(request, url)));
         return;
       }
 
       const sessionCheckpointMatch = url.pathname.match(/^\/v1\/sessions\/([0-9a-f-]{36})\/checkpoints$/i);
       if (request.method === "POST" && sessionCheckpointMatch) {
+        sessionRateLimiter.check(sessionCheckpointMatch[1], 10);
         const token = requestToken(request, url);
         const body = await readJson(request);
         if (Array.isArray(body.claudeMemObservationIds) && body.claudeMemObservationIds.length) {
           await sessions.remember(sessionCheckpointMatch[1], token, body.claudeMemObservationIds);
         }
         const session = await sessions.get(sessionCheckpointMatch[1], token);
-        const { record, token: relayToken } = createRecord(checkpointCapsule(session), { ttlHours: Number(body.ttlHours ?? 72) });
+        const { record } = createRecord(checkpointCapsule(session), { token, ttlHours: Number(body.ttlHours ?? 72) });
         record.sessionId = session.id;
         record.sessionVersion = session.version;
         record.sessionSnapshot = session;
@@ -314,9 +363,49 @@ export async function createRelayServer(options = {}) {
         const origin = externalOrigin(request, url);
         sendJson(response, 201, {
           ...checkpoint,
-          relayToken,
-          shareUrl: `${origin}/receiver#id=${encodeURIComponent(record.id)}&token=${encodeURIComponent(relayToken)}`,
+          shareUrl: `${origin}/receiver#id=${encodeURIComponent(record.id)}&token=${encodeURIComponent(token)}`,
         });
+        return;
+      }
+
+      const sessionAgentRunMatch = url.pathname.match(/^\/v1\/sessions\/([0-9a-f-]{36})\/agent\/run$/i);
+      if (request.method === "POST" && sessionAgentRunMatch) {
+        const token = requestToken(request, url);
+        sessionRateLimiter.check(sessionAgentRunMatch[1], 20);
+        const body = await readJson(request);
+        const session = await sessions.get(sessionAgentRunMatch[1], token);
+        const checkpoint = session.checkpoints.at(-1);
+        if (!checkpoint) {
+          const error = new Error("Seal a session checkpoint before running the shared agent.");
+          error.code = "NOT_FOUND";
+          throw error;
+        }
+        const record = await store.get(checkpoint.id);
+        if (!record?.workPod) {
+          const error = new Error("The latest session checkpoint has no work pod.");
+          error.code = "NOT_FOUND";
+          throw error;
+        }
+        const target = typeof body.target === "string" ? body.target : "generic";
+        if (!SUPPORTED_TARGETS.includes(target)) throw new Error(`Unsupported target: ${target}`);
+        const rendered = renderPrompt(record, target);
+        const prompt = body.demo === true
+          ? `${rendered}\n\nStage demonstration: do not inspect files or use tools. In no more than three short sentences, state the problem, constraint, and next action you inherited.`
+          : rendered;
+        const output = await agentQueue.enqueue(session.id, {
+          target, requestedBy: typeof body.requestedBy === "string" ? body.requestedBy : "session-api",
+        }, async (queueJob) => {
+          const result = await agentRunner.run(prompt);
+          const workPod = await workPodProvider.storeAgentResult(record.workPod, result);
+          await store.update(record.id, (current) => ({
+            ...current, workPod,
+            status: result.exitCode === 0 ? "agent-completed" : "agent-failed",
+            agentRuns: [...(current.agentRuns ?? []), { id: result.id, completedAt: result.completedAt, exitCode: result.exitCode, queueJobId: queueJob.id }],
+          }));
+          return { status: result.exitCode === 0 ? "agent-completed" : "agent-failed", result, queueJob };
+        });
+        await sessions.addActivity(session.id, token, { type: "agent", actor: "Relay agent", detail: output.status });
+        sendJson(response, 201, { ...output, queue: agentQueue.status(session.id) });
         return;
       }
 

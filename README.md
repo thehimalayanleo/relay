@@ -51,7 +51,7 @@ Open `http://127.0.0.1:4317/demo/greptile` after starting Relay Core.
 - User 2 restores the same memory set and issues an acceptance receipt bound to that digest.
 - The UI labels fixture input, local pods, and real Sailboxes distinctly.
 
-The live session synchronizes collaborative human work state. Model execution is serialized through one queue. Relay does not claim simultaneous shared-agent execution. The demo also does not claim that Greptile is live unless the authenticated MCP adapter supplied the finding, or claim token and resolution-time savings without the controlled evaluation described below.
+The live session provides concurrent human co-editing around one shared agent workspace. Model execution is serialized through the host's single queue. Relay does not claim simultaneous model execution. The demo also does not claim that Greptile is live unless the authenticated MCP adapter supplied the finding, or claim token and resolution-time savings without the controlled evaluation described below.
 
 ## One repository
 
@@ -102,6 +102,7 @@ GET  /v1/sessions/:id/events
 POST /v1/sessions/:id/greptile/sync
 GET  /v1/sessions/:id/metrics
 POST /v1/sessions/:id/checkpoints
+POST /v1/sessions/:id/agent/run
 ```
 
 Regular calls use `Authorization: Bearer <capability>`. The SSE endpoint also accepts `?token=` because the browser `EventSource` API cannot set authorization headers. Relay does not log request URLs.
@@ -123,17 +124,33 @@ See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the stack, integration boundary, 
 
 Requires Node.js 20 or newer.
 
-Public one-command CLI install:
+### Host
 
 ```bash
-brew install thehimalayanleo/relay/relay
+brew install thehimalayanleo/relay/relay && relay configure && relay serve --host 0.0.0.0 --public-url http://<tailscale-name>:4317
 ```
 
-The public tap lives at [thehimalayanleo/homebrew-relay](https://github.com/thehimalayanleo/homebrew-relay). No GitHub login or repository token is required. Then run `relay serve`, open `http://127.0.0.1:4317/demo/greptile`, create a session, and send its **Invite PM** link to the collaborator.
+Create and print a shared session from the host terminal:
 
-For optional backend integrations, run `relay configure` once. It prompts silently for Sail and Greptile keys and saves them locally with mode `0600`. Claude-Mem is auto-detected and remains optional.
+```bash
+relay session create --title "Fix checkout retries" --repo OWNER/REPO --pr 42
+```
 
-Two collaborators must point at the same Relay server. On a trusted Tailscale network, the host can run `relay serve --host 0.0.0.0`; the collaborator opens the generated capability link using the host's Tailscale address. Two independent localhost servers do not share a session.
+`--public-url` controls the collaborator-facing invitation. It should be the trusted LAN or Tailscale address that reaches the host. Relay still prints a separate localhost workspace for the host. When binding to `0.0.0.0` without `--public-url`, Relay warns instead of silently advertising localhost to collaborators.
+
+### Collaborator
+
+Open the invite link. No installation or keys required.
+
+Sanjana does not need Homebrew, Relay, Sail, Greptile, Claude-Mem, GitHub, or a model-provider credential. Her browser carries one expiring capability for one session. Every integration request and model job executes on Ajinkya's host.
+
+The public tap lives at [thehimalayanleo/homebrew-relay](https://github.com/thehimalayanleo/homebrew-relay). No GitHub login or repository token is required for the host installation.
+
+Run `relay configure` once on the host. It prompts silently for Sail and Greptile keys and saves them locally with mode `0600`. Claude-Mem is detected from the host worker. Model execution uses the host-approved `RELAY_AGENT_ARGV` command and its host-side provider credentials. None of these values are returned to browsers.
+
+Two collaborators must point at the same Relay server. Two independent localhost servers do not share a session.
+
+Relay is designed for trusted LAN or Tailscale use at this stage. Capability links are bearer authority. Do not expose the service directly to the public internet without an authenticated gateway and TLS.
 
 ```bash
 cd relay

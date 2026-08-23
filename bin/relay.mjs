@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { readFile } from "node:fs/promises";
-import { mkdir, writeFile } from "node:fs/promises";
+import { chmod, mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -10,8 +10,9 @@ function usage() {
 Portable human-agent handoffs for shells and agent harnesses.
 
 Usage:
-  relay serve [--host HOST] [--port PORT]
+  relay serve [--host HOST] [--port PORT] [--public-url URL]
   relay configure
+  relay session create --title TEXT --repo OWNER/REPO --pr NUMBER [--server URL]
   relay doctor [--server URL]
   relay handoff [notes.txt|-] --goal TEXT --next TEXT [--to TARGET] [--from HARNESS] [--pod] [--quiet]
   relay create <capsule.json> [--pod] [--ttl HOURS] [--quiet] [--server URL]
@@ -39,7 +40,7 @@ const configPath = process.env.RELAY_CONFIG_PATH
 async function loadSavedConfig() {
   try {
     const saved = JSON.parse(await readFile(configPath, "utf8"));
-    for (const name of ["SAIL_API_KEY", "GREPTILE_API_KEY"]) {
+    for (const name of ["SAIL_API_KEY", "GREPTILE_API_KEY", "RELAY_AGENT_HARNESS", "RELAY_AGENT_ARGV"]) {
       if (!process.env[name] && typeof saved[name] === "string" && saved[name]) process.env[name] = saved[name];
     }
   } catch (error) {
@@ -88,9 +89,13 @@ async function configure() {
   const config = {};
   if (sail) config.SAIL_API_KEY = sail;
   if (greptile) config.GREPTILE_API_KEY = greptile;
+  if (process.env.RELAY_AGENT_HARNESS) config.RELAY_AGENT_HARNESS = process.env.RELAY_AGENT_HARNESS;
+  if (process.env.RELAY_AGENT_ARGV) config.RELAY_AGENT_ARGV = process.env.RELAY_AGENT_ARGV;
   await mkdir(path.dirname(configPath), { recursive: true, mode: 0o700 });
   await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
+  await chmod(configPath, 0o600);
   console.log(`Saved ${Object.keys(config).length} integration key(s) to ${configPath}.`);
+  console.log("Claude-Mem is detected from the host worker. Model execution uses the host's RELAY_AGENT_ARGV configuration.");
 }
 
 function option(name, fallback = "") {
@@ -193,20 +198,47 @@ async function main() {
     const { createRelayServer } = await import("../src/server.mjs");
     const host = option("--host", process.env.HOST ?? "127.0.0.1");
     const port = Number(option("--port", process.env.PORT ?? "4317"));
+    const publicUrl = option("--public-url", process.env.RELAY_PUBLIC_URL ?? "").replace(/\/$/, "");
     if (!Number.isInteger(port) || port < 1 || port > 65_535) throw new Error("--port must be an integer from 1 to 65535.");
-    const service = await createRelayServer();
+    if (publicUrl) new URL(publicUrl);
+    process.env.RELAY_PUBLIC_URL = publicUrl;
+    const service = await createRelayServer({ publicUrl });
     await new Promise((resolve, reject) => {
       service.once("error", reject);
       service.listen(port, host, resolve);
     });
     console.log(`Relay listening at http://${host}:${port}`);
-    console.log(`PM dashboard: http://${host}:${port}/demo/greptile?role=pm`);
-    console.log(`SWE dashboard: http://${host}:${port}/demo/greptile?role=swe`);
+    console.log(`Host dashboard: http://127.0.0.1:${port}/demo/greptile`);
+    if (publicUrl) console.log(`Collaborator base URL: ${publicUrl}/demo/greptile`);
+    else if (["0.0.0.0", "::"].includes(host)) {
+      console.warn("Warning: Relay is reachable beyond localhost but --public-url was not provided.");
+      console.warn(`Restart with: relay serve --host ${host} --public-url http://<tailscale-name>:${port}`);
+      console.warn("Relay will not advertise localhost as a collaborator URL when a public URL is configured.");
+    }
     return;
   }
 
   if (command === "configure") {
     await configure();
+    return;
+  }
+
+  if (command === "session" && process.argv[3] === "create") {
+    const title = option("--title");
+    const repo = option("--repo");
+    const prNumber = Number(option("--pr"));
+    if (!title) throw new Error("session create requires --title.");
+    if (!repo || !repo.includes("/")) throw new Error("session create requires --repo OWNER/REPO.");
+    if (!Number.isInteger(prNumber) || prNumber <= 0) throw new Error("session create requires a positive --pr number.");
+    const created = await jsonRequest(`${server}/v1/sessions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ title, creatorRole: "swe", repository: { name: repo, prNumber, remote: "github", defaultBranch: option("--default-branch", "main") } }),
+    });
+    console.log("Relay session ready");
+    console.log(`Host:   ${created.hostWorkspaceUrl ?? created.creatorUrl}`);
+    console.log(`Invite: ${created.pmInviteUrl}`);
+    console.log(`Expires: ${created.expiresAt}`);
     return;
   }
 

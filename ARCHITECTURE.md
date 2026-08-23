@@ -36,6 +36,9 @@ Verified Relay checkpoint + work pod
 | Protocol | `relay/v1` canonical JSON capsule with a SHA-256 digest | Portable, deterministic, and independently verifiable. |
 | Work pod | Local filesystem or private Sailbox via `@sailresearch/sdk` | Gives people and agents both machine-readable state and a persistent remote CPU. |
 | Access | Random 256-bit capability link, fragment-carried token, hashed token at rest, expiry | Keeps the prototype account-free while avoiding public identifiers and server logs containing raw tokens. |
+| Provider ownership | Sail, Greptile, Claude-Mem, and model credentials live only on the Relay host | Collaborators open one browser link and never install or configure providers. |
+| Browser authority | One capability grants read, write, SSE, metrics, checkpoint, and serialized-agent access to one session | No global session listing exists; a capability for session A cannot access session B. |
+| Network boundary | Same-origin by default, explicit CORS allowlist, configurable public URL, per-session request limit | A trusted LAN or Tailscale host is shareable without wildcard production CORS. |
 | Storage | Local JSON and filesystem provider | Makes the lifecycle inspectable. This is replaceable, not the production storage recommendation. |
 | Harness adapters | Codex, Claude Code, Cursor, OpenCode, A2A, generic agent, and human renderers | The protocol stays vendor-neutral while each recipient receives a useful resume format. |
 | Agent control surface | Node CLI, JavaScript client, and configured argv runner | Agents can create, pull, render, accept, terminate, and continue handoffs without automating the UI. |
