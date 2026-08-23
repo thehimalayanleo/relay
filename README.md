@@ -285,6 +285,27 @@ node bin/relay.mjs agent '<share-url>' --target generic
 
 The result is written back into the same work pod as `agents/<run-id>.json`. This is the first no-human loop. A production scheduler, cancellation API, model endpoint policy, and multi-step supervision remain future work.
 
+### Two local OpenCode sessions, one Sailbox
+
+The host can configure OpenCode Go as Relay's serialized runner:
+
+```bash
+export RELAY_AGENT_HARNESS=opencode-go-ox-alpha
+export RELAY_OPENCODE_MODEL=opencode-go/ox-alpha-free
+export RELAY_AGENT_ARGV='["relay-opencode-runner"]'
+relay serve --host 0.0.0.0 --public-url http://<tailscale-name>:4317
+```
+
+In the dashboard, seal one checkpoint and select **Run Ajinkya + Sanjana**. Relay submits both requests together, starts two separate local OpenCode sessions, and serializes them through the session queue. Both results are written into the same Sailbox as distinct `agents/<run-id>.json` artifacts. The coordination panel shows each OpenCode session ID, queue job ID, start and completion time, and the shared Sailbox ID.
+
+From a source checkout, the reproducible proof is:
+
+```bash
+node scripts/demo-two-opencode-one-sailbox.mjs
+```
+
+This is two independent model processes coordinated sequentially through one durable workspace. It is not simultaneous model execution.
+
 Node-based harnesses can use the client directly:
 
 ```js

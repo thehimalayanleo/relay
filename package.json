@@ -28,7 +28,8 @@
   },
   "bin": {
     "relay": "./bin/relay.mjs",
-    "relay-core": "./bin/relay-core.mjs"
+    "relay-core": "./bin/relay-core.mjs",
+    "relay-opencode-runner": "./bin/opencode-stdin-runner.mjs"
   },
   "exports": {
     ".": "./src/client.mjs",

@@ -145,6 +145,7 @@ export class SessionService {
       activity: [],
       claudeMem: { observationIds: [], lastRecallAt: null },
       checkpoints: [],
+      agentRuns: [],
       greptile: { iteration: 0, initialized: false, findings: {}, samples: [], lastSyncAt: null },
     };
     await this.store.create(record);
@@ -330,6 +331,19 @@ export class SessionService {
     });
     const snapshot = this.snapshot(updated);
     this.broadcast(id, "checkpoint", snapshot);
+    return snapshot;
+  }
+
+  async addAgentRun(id, token, run) {
+    this.assertReadable(await this.store.get(id), token);
+    const updated = await this.store.update(id, (record) => {
+      record.agentRuns = [...(record.agentRuns ?? []), run];
+      record.updatedAt = run.completedAt;
+      record.activity.push({ id: randomUUID(), type: "agent", actor: run.requestedBy, detail: `completed OpenCode session ${run.openCodeSessionId ?? run.id}`, at: run.completedAt, version: record.version });
+      return record;
+    });
+    const snapshot = this.snapshot(updated);
+    this.broadcast(id, "agent-queue", snapshot);
     return snapshot;
   }
 

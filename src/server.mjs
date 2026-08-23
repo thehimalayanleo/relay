@@ -395,16 +395,30 @@ export async function createRelayServer(options = {}) {
         const output = await agentQueue.enqueue(session.id, {
           target, requestedBy: typeof body.requestedBy === "string" ? body.requestedBy : "session-api",
         }, async (queueJob) => {
-          const result = await agentRunner.run(prompt);
-          const workPod = await workPodProvider.storeAgentResult(record.workPod, result);
+          const result = await agentRunner.run(prompt, { requestedBy: body.requestedBy, queueJobId: queueJob.id, sessionId: session.id });
+          const latestRecord = await store.get(checkpoint.id);
+          const workPod = await workPodProvider.storeAgentResult(latestRecord.workPod, result);
           await store.update(record.id, (current) => ({
             ...current, workPod,
             status: result.exitCode === 0 ? "agent-completed" : "agent-failed",
             agentRuns: [...(current.agentRuns ?? []), { id: result.id, completedAt: result.completedAt, exitCode: result.exitCode, queueJobId: queueJob.id }],
           }));
+          const sessionMatch = result.stdout.match(/"sessionID"\s*:\s*"([^"]+)"/);
+          await sessions.addAgentRun(session.id, token, {
+            id: result.id,
+            openCodeSessionId: sessionMatch?.[1] ?? null,
+            requestedBy: typeof body.requestedBy === "string" ? body.requestedBy : "Collaborator",
+            checkpointId: checkpoint.id,
+            sailboxId: workPod.sailboxId ?? null,
+            provider: workPod.provider,
+            queueJobId: queueJob.id,
+            startedAt: result.startedAt,
+            completedAt: result.completedAt,
+            exitCode: result.exitCode,
+            artifact: `agents/${result.id}.json`,
+          });
           return { status: result.exitCode === 0 ? "agent-completed" : "agent-failed", result, queueJob };
         });
-        await sessions.addActivity(session.id, token, { type: "agent", actor: "Relay agent", detail: output.status });
         sendJson(response, 201, { ...output, queue: agentQueue.status(session.id) });
         return;
       }

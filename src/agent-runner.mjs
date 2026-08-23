@@ -41,7 +41,7 @@ export class ConfiguredAgentRunner {
     };
   }
 
-  async run(prompt) {
+  async run(prompt, context = {}) {
     if (!this.argv) {
       const error = new Error("No autonomous harness is configured. Set RELAY_AGENT_ARGV to a JSON argv array.");
       error.code = "AGENT_NOT_CONFIGURED";
@@ -49,7 +49,12 @@ export class ConfiguredAgentRunner {
     }
     const started = Date.now();
     const child = this.spawnImpl(this.argv[0], this.argv.slice(1), {
-      env: process.env,
+      env: {
+        ...process.env,
+        RELAY_AGENT_REQUESTED_BY: String(context.requestedBy ?? ""),
+        RELAY_AGENT_QUEUE_JOB_ID: String(context.queueJobId ?? ""),
+        RELAY_AGENT_SESSION_ID: String(context.sessionId ?? ""),
+      },
       shell: false,
       stdio: ["pipe", "pipe", "pipe"],
     });
