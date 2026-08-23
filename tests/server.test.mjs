@@ -15,9 +15,14 @@ const capsule = {
   source: { harness: "test" },
 };
 
-async function withServer(fn) {
+async function withServer(fn, options = {}) {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), "passon-test-"));
-  const server = await createPassOnServer({ dataDir, podDir: path.join(dataDir, "pods") });
+  const server = await createPassOnServer({
+    dataDir,
+    podDir: path.join(dataDir, "pods"),
+    workPodMode: "local",
+    ...options,
+  });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   try {
@@ -150,4 +155,34 @@ test("work pod packages and returns sealed tribal context", async () => {
     assert.match(pod.handoff, /Cross-harness resume/);
     assert.deepEqual(pod.files, ["CAMP.json", "HANDOFF.md", "manifest.json"]);
   });
+});
+
+test("capability holder can run a configured autonomous harness and terminate the pod", async () => {
+  const fakeRunner = {
+    status: () => ({ configured: true, harness: "test-5090", transport: "ssh" }),
+    run: async () => ({
+      id: "agent-run-1",
+      harness: "test-5090",
+      startedAt: new Date().toISOString(),
+      completedAt: new Date().toISOString(),
+      durationMs: 4,
+      exitCode: 0,
+      stdout: "continued safely",
+      stderr: "",
+    }),
+  };
+  await withServer(async (origin) => {
+    const client = new PassOnClient(origin);
+    const created = await client.create(capsule, { workPod: true });
+    const run = await client.runAgent(created.shareUrl, "generic");
+    assert.equal(run.status, "agent-completed");
+    assert.equal(run.result.harness, "test-5090");
+    assert.match(run.workPod.files.at(-1), /^agents\//);
+
+    const record = await client.read(created.shareUrl);
+    assert.equal(record.agentRuns[0].artifact, "agents/agent-run-1.json");
+
+    const terminated = await client.terminateWorkPod(created.shareUrl);
+    assert.equal(terminated.workPod.state, "terminated");
+  }, { agentRunner: fakeRunner });
 });

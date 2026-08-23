@@ -41,6 +41,38 @@ byId("pull-pod").addEventListener("click", async () => {
   byId("notice").textContent = "The pod supplied its sealed CAMP bundle and handoff brief.";
 });
 
+byId("run-agent").addEventListener("click", async () => {
+  byId("run-agent").disabled = true;
+  byId("notice").textContent = "The configured autonomous harness is continuing this checkpoint...";
+  try {
+    const response = await fetch(`${api}/agent/run`, {
+      method: "POST",
+      headers: { ...auth, "content-type": "application/json" },
+      body: JSON.stringify({ target: byId("target").value }),
+    });
+    const body = await response.json();
+    if (!response.ok) throw new Error(body.message || `HTTP ${response.status}`);
+    byId("status").textContent = body.status;
+    byId("pod-detail").textContent = `${body.result.harness} · exit ${body.result.exitCode} · ${body.result.durationMs}ms`;
+    byId("notice").textContent = `Agent result stored as agents/${body.result.id}.json in the work pod.`;
+  } finally {
+    byId("run-agent").disabled = false;
+  }
+});
+
+byId("terminate-pod").addEventListener("click", async () => {
+  if (!window.confirm("Terminate this work pod? A Sailbox cannot be restarted after termination.")) return;
+  const response = await fetch(`${api}/pod/terminate`, { method: "POST", headers: auth });
+  const body = await response.json();
+  if (!response.ok) throw new Error(body.message || `HTTP ${response.status}`);
+  byId("pod-title").textContent = "Work pod terminated";
+  byId("pod-detail").textContent = body.workPod.terminatedAt;
+  byId("pull-pod").disabled = true;
+  byId("run-agent").disabled = true;
+  byId("terminate-pod").disabled = true;
+  byId("notice").textContent = "The work pod has been terminated. The sealed PassOn record remains until expiry.";
+});
+
 byId("copy-prompt").addEventListener("click", async () => {
   const target = byId("target").value;
   const response = await fetch(`${api}/render?target=${encodeURIComponent(target)}`, { headers: auth });

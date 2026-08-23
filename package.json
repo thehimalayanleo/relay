@@ -1,15 +1,34 @@
 {
-  "name": "passon-protocol",
+  "name": "relay-handoff",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
-  "description": "Portable, verified continuation checkpoints for people and AI agent harnesses.",
+  "description": "Verified investigation handoffs between human-agent work loops.",
+  "keywords": [
+    "agents",
+    "handoff",
+    "codex",
+    "a2a",
+    "cli"
+  ],
+  "files": [
+    "bin/",
+    "src/",
+    "public/",
+    "schema/",
+    "examples/",
+    "README.md",
+    "ARCHITECTURE.md",
+    "PROTOCOL.md",
+    "COST_EFFICACY.md"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/thehimalayanleo/passon-context-port.git"
   },
   "bin": {
-    "passon": "./bin/passon.mjs"
+    "relay": "./bin/passon.mjs",
+    "passon": "./bin/passon.mjs",
+    "passon-core": "./bin/passon-core.mjs"
   },
   "exports": {
     ".": "./src/client.mjs",
@@ -17,11 +36,19 @@
   },
   "scripts": {
     "start": "node src/server.mjs",
+    "start:sail": "PASS_ON_WORK_POD_PROVIDER=sail node src/server.mjs",
     "test": "node --test",
+    "test:macos": "cd apps/macos && swift test",
+    "package:cli": "scripts/build_cli.sh",
+    "package:macos": "apps/macos/scripts/build_app.sh",
+    "package": "scripts/package_release.sh",
     "cost": "node scripts/cost-model.mjs",
     "evaluate": "node scripts/evaluate.mjs examples/eval-results.example.json"
   },
   "engines": {
     "node": ">=20"
+  },
+  "dependencies": {
+    "@sailresearch/sdk": "^0.9.0"
   }
 }

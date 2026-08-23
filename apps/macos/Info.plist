@@ -5,15 +5,15 @@
   <key>CFBundleDevelopmentRegion</key>
   <string>en</string>
   <key>CFBundleDisplayName</key>
-  <string>PassOn</string>
+	<string>Relay</string>
   <key>CFBundleExecutable</key>
-  <string>PassOn</string>
+  <string>Relay</string>
   <key>CFBundleIdentifier</key>
   <string>org.passon.dock</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
-  <string>PassOn</string>
+  <string>Relay</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>

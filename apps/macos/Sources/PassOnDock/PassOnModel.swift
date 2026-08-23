@@ -26,9 +26,10 @@ final class PassOnModel: ObservableObject {
     @Published var destination: Destination = .claude
     @Published var sourceApp = "Clipboard"
     @Published var capturedText = ""
-    @Published var notice = "Copy useful context in any app, then open PassOn."
+    @Published var notice = "Copy useful context in any app, then open Relay."
     @Published var isWorking = false
     @Published var serviceAvailable = false
+    @Published var serviceMode = "LOCAL"
     @Published var lastShareURL: URL?
     @Published var importedCapsule: PassOnCapsule?
     @Published var activeCapsule: PassOnCapsule?
@@ -107,7 +108,7 @@ final class PassOnModel: ObservableObject {
             return
         }
         guard serviceAvailable else {
-            notice = "Start PassOn Core, then try again."
+            notice = "Start Relay Core, then try again."
             return
         }
         Task { await publishToService(capsule, copyLink: true) }
@@ -208,10 +209,14 @@ final class PassOnModel: ObservableObject {
 
     private func checkService() async {
         do {
-            let (_, response) = try await URLSession.shared.data(from: serviceBaseURL.appendingPathComponent("health"))
+            let (data, response) = try await URLSession.shared.data(from: serviceBaseURL.appendingPathComponent("health"))
             serviceAvailable = (response as? HTTPURLResponse)?.statusCode == 200
+            if serviceAvailable, let health = try? JSONDecoder().decode(ServiceHealthResponse.self, from: data) {
+                serviceMode = health.workPod.provider == "sail" ? "SAIL" : "CORE"
+            }
         } catch {
             serviceAvailable = false
+            serviceMode = "LOCAL"
         }
     }
 
@@ -240,7 +245,7 @@ final class PassOnModel: ObservableObject {
             }
         } catch {
             serviceAvailable = false
-            notice = "PassOn Core could not create the handoff."
+            notice = "Relay Core could not create the handoff."
         }
     }
 }

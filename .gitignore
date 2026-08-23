@@ -1,4 +1,7 @@
 .data/
 .pods/
 node_modules/
+.npm-cache/
+dist/
 *.log
+.env.local

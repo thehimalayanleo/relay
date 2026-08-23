@@ -46,6 +46,23 @@ function cleanChecks(value) {
     .filter((item) => item.command || item.result);
 }
 
+function cleanMemories(value) {
+  if (!Array.isArray(value)) return [];
+  const types = new Set(["finding", "evidence", "decision", "constraint", "rejected-approach", "test-result", "next-action"]);
+  return value
+    .map((item) => ({
+      type: types.has(item?.type) ? item.type : "evidence",
+      summary: cleanText(item?.summary),
+      source: cleanText(item?.source, "human-agent-loop"),
+      confidence: ["low", "medium", "high", "verified"].includes(item?.confidence)
+        ? item.confidence
+        : "medium",
+      occurredAt: cleanText(item?.occurredAt),
+      evidenceUri: cleanText(item?.evidenceUri),
+    }))
+    .filter((item) => item.summary);
+}
+
 export function normalizeCapsule(input, now = new Date()) {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     throw new TypeError("Capsule must be a JSON object.");
@@ -74,6 +91,7 @@ export function normalizeCapsule(input, now = new Date()) {
     openQuestions: cleanList(input.openQuestions),
     artifacts: cleanArtifacts(input.artifacts),
     validation: cleanChecks(input.validation),
+    memories: cleanMemories(input.memories),
     sideEffects: cleanList(input.sideEffects),
     traceSummary: cleanText(input.traceSummary),
     nextAction,

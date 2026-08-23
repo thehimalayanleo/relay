@@ -1,0 +1,28 @@
+{
+  "startedAt": "2026-08-23T10:03:00-07:00",
+  "findings": [
+    {
+      "id": "ARC-001",
+      "foundAt": "2026-08-23T10:05:00-07:00",
+      "resolvedAt": "2026-08-23T10:07:00-07:00",
+      "status": "resolved",
+      "summary": "Environment state restarted after episode handoff",
+      "proof": "test_resume_restores_environment_state"
+    },
+    {
+      "id": "ARC-002",
+      "foundAt": "2026-08-23T10:13:00-07:00",
+      "resolvedAt": "2026-08-23T10:16:00-07:00",
+      "status": "resolved",
+      "summary": "Zero-budget episode remained running forever",
+      "proof": "test_zero_budget_episode_reaches_terminal_status"
+    },
+    {
+      "id": "EXT-001",
+      "foundAt": "2026-08-23T10:09:00-07:00",
+      "status": "blocked",
+      "summary": "Greptile GitHub app cannot yet index the private repository",
+      "proof": "Greptile MCP list_knowledge_bases returned zero repositories"
+    }
+  ]
+}

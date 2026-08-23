@@ -56,6 +56,8 @@ Artifacts:
 - `dist/PassOn.app`
 - `dist/PassOn-macOS.zip`
 
+From the repository root, `npm run package` builds both the npm-installable CLI tarball and the macOS zip, then writes SHA-256 checksums under the root `dist/` directory. The app is ad-hoc signed for direct testing. Apple Developer ID signing and notarization are still required for warning-free public distribution.
+
 ## Adapter boundary
 
 This native example uses the clipboard as the universal permissionless adapter. A deeper harness integration should implement the same operations through MCP, a plugin API, or a native SDK:

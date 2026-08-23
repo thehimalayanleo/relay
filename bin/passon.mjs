@@ -2,24 +2,27 @@
 import { readFile } from "node:fs/promises";
 
 function usage() {
-  console.log(`PassOn CLI
+  console.log(`Relay CLI
 
 Portable human-agent handoffs for shells and agent harnesses.
 
 Usage:
-  passon doctor [--server URL]
-  passon handoff [notes.txt|-] --goal TEXT --next TEXT [--to TARGET] [--from HARNESS] [--pod] [--quiet]
-  passon create <capsule.json> [--pod] [--ttl HOURS] [--quiet] [--server URL]
-  passon pull <share-url> [--target codex|claude|cursor|generic|human]
-  passon get <share-url>
-  passon pod <share-url>
-  passon render <share-url> [--target codex|claude|cursor|generic|human]
-  passon accept <share-url> --actor NAME --goal TEXT --first-action TEXT [--harness NAME]
-  passon cost [assumptions.json] [--server URL]
+  relay serve [--host HOST] [--port PORT]
+  relay doctor [--server URL]
+  relay handoff [notes.txt|-] --goal TEXT --next TEXT [--to TARGET] [--from HARNESS] [--pod] [--quiet]
+  relay create <capsule.json> [--pod] [--ttl HOURS] [--quiet] [--server URL]
+  relay pull <share-url> [--target codex|claude|cursor|generic|human]
+  relay get <share-url>
+  relay pod <share-url>
+  relay agent <share-url> [--target codex|claude|cursor|generic|human]
+  relay terminate <share-url>
+  relay render <share-url> [--target codex|claude|cursor|generic|human]
+  relay accept <share-url> --actor NAME --goal TEXT --first-action TEXT [--harness NAME]
+  relay cost [assumptions.json] [--server URL]
 
 Agent-friendly examples:
-  git diff | passon handoff - --goal "Finish the parser fix" --next "Run npm test" --to codex --pod --quiet
-  passon pull "$PASS_ON_URL" --target claude
+  git diff | relay handoff - --goal "Finish the parser fix" --next "Run npm test" --to codex --pod --quiet
+  relay pull "$PASS_ON_URL" --target claude
 
 All structured commands write JSON to stdout. Errors go to stderr and use a nonzero exit code.
 `);
@@ -45,7 +48,7 @@ function positional(index = 0) {
 }
 
 function endpointFromShareUrl(shareUrl, suffix = "") {
-  if (!shareUrl) throw new Error("Provide a PassOn capability URL.");
+  if (!shareUrl) throw new Error("Provide a Relay link.");
   const parsed = new URL(shareUrl);
   const fragment = new URLSearchParams(parsed.hash.replace(/^#/, ""));
   const id = parsed.searchParams.get("id") ?? fragment.get("id");
@@ -120,6 +123,20 @@ async function main() {
     return;
   }
 
+  if (command === "serve") {
+    const { createPassOnServer } = await import("../src/server.mjs");
+    const host = option("--host", process.env.HOST ?? "127.0.0.1");
+    const port = Number(option("--port", process.env.PORT ?? "4317"));
+    if (!Number.isInteger(port) || port < 1 || port > 65_535) throw new Error("--port must be an integer from 1 to 65535.");
+    const service = await createPassOnServer();
+    await new Promise((resolve, reject) => {
+      service.once("error", reject);
+      service.listen(port, host, resolve);
+    });
+    console.log(`Relay listening at http://${host}:${port}`);
+    return;
+  }
+
   if (command === "doctor") {
     const health = await jsonRequest(`${server}/health`);
     writeJson({ ok: true, server, ...health, next: "passon handoff - --goal <goal> --next <action> --pod" });
@@ -150,6 +167,25 @@ async function main() {
   if (command === "pod") {
     const endpoint = endpointFromShareUrl(argument, "/pod");
     writeJson(await jsonRequest(endpoint.url, authorized(endpoint)));
+    return;
+  }
+
+  if (command === "agent") {
+    const endpoint = endpointFromShareUrl(argument, "/agent/run");
+    writeJson(await jsonRequest(endpoint.url, {
+      method: "POST",
+      headers: { authorization: `Bearer ${endpoint.token}`, "content-type": "application/json" },
+      body: JSON.stringify({ target: option("--target", "generic") }),
+    }));
+    return;
+  }
+
+  if (command === "terminate") {
+    const endpoint = endpointFromShareUrl(argument, "/pod/terminate");
+    writeJson(await jsonRequest(endpoint.url, {
+      method: "POST",
+      headers: { authorization: `Bearer ${endpoint.token}` },
+    }));
     return;
   }
 
@@ -210,6 +246,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(`passon: ${error.message}`);
+  console.error(`relay: ${error.message}`);
   process.exitCode = 1;
 });

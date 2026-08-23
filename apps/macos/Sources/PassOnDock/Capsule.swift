@@ -126,7 +126,7 @@ enum CapsuleRenderer {
         }
 
         return """
-        # PassOn context from \(capsule.source.harness)
+        # Relay context from \(capsule.source.harness)
 
         Capsule digest: sha256:\(capsule.digest)
         CAMP space: \(capsule.camp?.spaceId.uuidString ?? "legacy")
@@ -173,6 +173,16 @@ struct ServiceCreateRequest: Codable {
 
 struct ServiceWorkPodRequest: Codable {
     let requested: Bool
+}
+
+struct ServiceHealthResponse: Codable {
+    let ok: Bool
+    let workPod: ServiceHealthWorkPod
+}
+
+struct ServiceHealthWorkPod: Codable {
+    let provider: String
+    let configured: Bool
 }
 
 struct ServiceCapsule: Codable {

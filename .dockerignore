@@ -4,3 +4,7 @@ node_modules
 npm-debug.log
 tests
 examples
+apps/macos/.build
+apps/macos/dist
+demo/out
+.pods

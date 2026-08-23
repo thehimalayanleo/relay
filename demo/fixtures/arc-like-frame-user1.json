@@ -1,0 +1,37 @@
+{
+  "evidenceLabel": "WORKFLOW SIMULATION",
+  "environment": "invented-arc-agi-3-like-grid",
+  "officialBenchmarkTask": false,
+  "step": 7,
+  "livesRemaining": 1,
+  "agent": {
+    "row": 3,
+    "column": 2,
+    "orientation": "east"
+  },
+  "grid": [
+    "#######",
+    "#....G#",
+    "#.c.a.#",
+    "#.^P#.#",
+    "#.a...#",
+    "#.....#",
+    "#######"
+  ],
+  "legend": {
+    "#": "wall",
+    "G": "candidate goal",
+    "c": "cyan toggle, already activated",
+    "a": "open amber gate",
+    "P": "purple tile, effect unknown",
+    "^": "agent position; orientation is stored separately"
+  },
+  "observedMechanics": [
+    "Activating the cyan tile toggled both amber gates",
+    "Movement advanced one cell without changing orientation"
+  ],
+  "unresolved": [
+    "Effect of the purple tile",
+    "Whether the cyan tile must be toggled a second time"
+  ]
+}

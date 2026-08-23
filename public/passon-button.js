@@ -14,6 +14,7 @@ export class PassOnButton extends HTMLElement {
 
   connectedCallback() {
     this.render();
+    this.refreshCoreStatus();
     this.shadowRoot.querySelector(".port").addEventListener("click", () => this.open());
     this.shadowRoot.querySelector(".backdrop").addEventListener("click", (event) => {
       if (event.target.classList.contains("backdrop")) this.close();
@@ -31,6 +32,20 @@ export class PassOnButton extends HTMLElement {
       if (event.key === "Escape") this.close();
     };
     document.addEventListener("keydown", this.escapeHandler);
+  }
+
+  async refreshCoreStatus() {
+    const endpoint = this.getAttribute("endpoint") || window.location.origin;
+    try {
+      const response = await fetch(`${endpoint}/health`);
+      const health = await response.json();
+      if (!response.ok) return;
+      this.shadowRoot.querySelector(".mode").textContent = health.workPod?.provider === "sail"
+        ? "SAIL ONLINE"
+        : "LOCAL RELAY";
+    } catch {
+      this.shadowRoot.querySelector(".mode").textContent = "CORE OFFLINE";
+    }
   }
 
   disconnectedCallback() {
@@ -91,7 +106,7 @@ export class PassOnButton extends HTMLElement {
       const result = await response.json();
       if (!response.ok) throw new Error(result.message || `HTTP ${response.status}`);
       this.result = result;
-      this.shadowRoot.querySelector(".pod-name").textContent = result.workPod?.provider === "local-demo" ? "Demo pod" : "Sailbox";
+      this.shadowRoot.querySelector(".pod-name").textContent = result.workPod?.provider === "sail" ? "Sailbox" : "Demo pod";
       this.shadowRoot.querySelector(".pod-icon").classList.add("ready");
       this.shadowRoot.querySelector(".digest").textContent = result.digest.slice(0, 12);
       this.shadowRoot.querySelector(".state").textContent = "LINK READY";
@@ -123,48 +138,48 @@ export class PassOnButton extends HTMLElement {
   render() {
     this.shadowRoot.innerHTML = `
       <style>
-        :host { all: initial; font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+        :host { all: initial; --passon-orange: #ff5a1f; --passon-orange-rgb: 255,90,31; font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
         * { box-sizing: border-box; }
         button { font: inherit; }
-        .port { position: fixed; right: 24px; bottom: 24px; z-index: 2147483000; width: 54px; height: 54px; padding: 0; border: 1px solid rgba(255,255,255,.2); border-radius: 50%; color: white; background: #111; box-shadow: 0 16px 35px rgba(0,0,0,.28); cursor: pointer; transition: transform .18s ease, box-shadow .18s ease; }
-        .port:hover { transform: translateY(-2px) scale(1.03); box-shadow: 0 19px 40px rgba(0,0,0,.34); }
+        .port { position: fixed; right: 24px; bottom: 24px; z-index: 2147483000; width: 52px; height: 52px; padding: 0; border: 1px solid rgba(255,255,255,.28); border-radius: 50%; color: white; background: var(--passon-orange); box-shadow: 0 14px 32px rgba(var(--passon-orange-rgb),.30); cursor: pointer; transition: transform .18s ease, box-shadow .18s ease; }
+        .port:hover { transform: translateY(-2px) scale(1.03); box-shadow: 0 18px 38px rgba(var(--passon-orange-rgb),.38); }
         .port-glyph { display: grid; place-items: center; font-size: 21px; font-weight: 800; }
         .backdrop { position: fixed; inset: 0; z-index: 2147482999; display: flex; justify-content: flex-end; align-items: flex-end; padding: 90px 24px; background: rgba(19,21,23,.22); backdrop-filter: blur(2px) saturate(.85); opacity: 0; pointer-events: none; transition: opacity .18s ease; }
         .backdrop.visible { opacity: 1; pointer-events: auto; }
         .panel { width: min(408px, calc(100vw - 28px)); color: #181a18; background: rgba(250,249,245,.97); border: 1px solid rgba(24,26,24,.13); border-radius: 22px; box-shadow: 0 28px 80px rgba(0,0,0,.26); overflow: hidden; transform: translateY(10px) scale(.98); transition: transform .2s ease; outline: none; }
         .visible .panel { transform: translateY(0) scale(1); }
         .head { display: flex; align-items: center; gap: 10px; padding: 14px 15px; border-bottom: 1px solid rgba(24,26,24,.1); }
-        .mark { display: grid; place-items: center; width: 30px; height: 30px; color: white; background: #111; border-radius: 9px; font-weight: 850; }
+        .mark { display: grid; place-items: center; width: 30px; height: 30px; color: white; background: var(--passon-orange); border-radius: 9px; font-weight: 850; }
         .brand { display: grid; gap: 1px; }
         .brand strong { font-size: 11px; letter-spacing: .14em; }
         .brand span { color: #6b6e67; font-size: 10px; }
-        .mode { margin-left: auto; color: #7653c8; font: 700 9px ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .08em; }
+        .mode { margin-left: auto; color: var(--passon-orange); font: 700 9px ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .08em; }
         .close { width: 26px; height: 26px; padding: 0; color: #555a53; border: 0; border-radius: 50%; background: rgba(0,0,0,.055); cursor: pointer; }
         .body { display: grid; gap: 13px; padding: 15px; }
         .label { margin: 0 0 7px; color: #73776f; font-size: 9px; font-weight: 800; letter-spacing: .12em; }
         .destinations { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
         .destination { display: flex; justify-content: center; align-items: center; gap: 6px; min-height: 36px; color: #242624; border: 1px solid rgba(24,26,24,.1); border-radius: 10px; background: rgba(255,255,255,.55); font-size: 11px; font-weight: 700; cursor: pointer; }
-        .destination.selected { color: white; background: #111; border-color: #111; }
-        .space { padding: 11px; border: 1px solid rgba(118,83,200,.17); border-radius: 13px; background: rgba(118,83,200,.06); }
+        .destination.selected { color: white; background: var(--passon-orange); border-color: var(--passon-orange); }
+        .space { padding: 11px; border: 1px solid rgba(var(--passon-orange-rgb),.20); border-radius: 13px; background: rgba(var(--passon-orange-rgb),.06); }
         .space-head, .receipt { display: flex; align-items: center; }
         .space-head { margin-bottom: 8px; }
         .space-head .label { margin: 0; }
-        .space-tag { margin-left: auto; color: #7653c8; font: 750 8px ui-monospace, SFMono-Regular, Menlo, monospace; }
+        .space-tag { margin-left: auto; color: var(--passon-orange); font: 750 8px ui-monospace, SFMono-Regular, Menlo, monospace; }
         .route { display: grid; grid-template-columns: 62px 1fr 62px 1fr 62px; align-items: center; gap: 3px; }
         .node { display: grid; justify-items: center; gap: 4px; min-width: 0; }
         .node-icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; background: rgba(0,0,0,.07); font-size: 10px; font-weight: 850; }
-        .pod-icon { color: #7653c8; background: rgba(118,83,200,.13); }
-        .pod-icon.ready { color: white; background: #7653c8; }
+        .pod-icon { color: var(--passon-orange); background: rgba(var(--passon-orange-rgb),.13); }
+        .pod-icon.ready { color: white; background: var(--passon-orange); }
         .node-name { width: 100%; overflow: hidden; text-align: center; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; font-weight: 700; }
         .lineage { display: flex; align-items: center; }
-        .lineage i { flex: 1; height: 1px; background: rgba(118,83,200,.42); }
-        .lineage b { display: grid; place-items: center; width: 22px; height: 22px; color: #7653c8; border-radius: 50%; background: rgba(118,83,200,.13); font-size: 11px; }
+        .lineage i { flex: 1; height: 1px; background: rgba(var(--passon-orange-rgb),.42); }
+        .lineage b { display: grid; place-items: center; width: 22px; height: 22px; color: var(--passon-orange); border-radius: 50%; background: rgba(var(--passon-orange-rgb),.13); font-size: 11px; }
         .context { padding: 11px; border: 1px solid rgba(24,26,24,.1); border-radius: 13px; background: rgba(255,255,255,.58); }
         .context-top { display: flex; justify-content: space-between; gap: 10px; }
         .context-size { color: #7d8179; font: 9px ui-monospace, SFMono-Regular, Menlo, monospace; }
         .objective { margin: 0 0 6px; font-size: 12px; font-weight: 750; line-height: 1.35; }
         .preview { display: -webkit-box; overflow: hidden; margin: 0; color: #5f635c; font: 10px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
-        .primary { width: 100%; min-height: 44px; padding: 0 13px; color: white; border: 0; border-radius: 12px; background: #111; font-size: 12px; font-weight: 800; cursor: pointer; }
+        .primary { width: 100%; min-height: 44px; padding: 0 13px; color: white; border: 0; border-radius: 12px; background: var(--passon-orange); font-size: 12px; font-weight: 800; cursor: pointer; }
         .primary:disabled { opacity: .6; cursor: wait; }
         .receipt { gap: 7px; min-height: 17px; }
         .state-dot { width: 6px; height: 6px; border-radius: 50%; background: #e39c35; }
@@ -179,10 +194,10 @@ export class PassOnButton extends HTMLElement {
       </style>
       <button class="port" type="button" aria-label="Pass context to another agent"><span class="port-glyph">↔</span></button>
       <div class="backdrop" aria-hidden="true">
-        <section class="panel" role="dialog" aria-label="PassOn context port" tabindex="-1">
+        <section class="panel" role="dialog" aria-label="Relay context port" tabindex="-1">
           <div class="head">
             <span class="mark">↔</span>
-            <span class="brand"><strong>PASS ON</strong><span>Context port</span></span>
+            <span class="brand"><strong>RELAY</strong><span>Context port</span></span>
             <span class="mode">LOCAL RELAY</span>
             <button class="close" type="button" aria-label="Close">×</button>
           </div>

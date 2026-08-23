@@ -1,5 +1,7 @@
 import SwiftUI
 
+private let passOnOrange = Color(red: 1.0, green: 90.0 / 255.0, blue: 31.0 / 255.0)
+
 struct PassOnRootView: View {
     @ObservedObject var model: PassOnModel
 
@@ -20,7 +22,7 @@ struct PassOnRootView: View {
         Button(action: model.toggle) {
             ZStack {
                 Circle()
-                    .fill(Color.black)
+                    .fill(passOnOrange)
                 Circle()
                     .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
                 Image(systemName: "arrow.left.arrow.right")
@@ -28,10 +30,10 @@ struct PassOnRootView: View {
                     .foregroundStyle(.white)
             }
             .frame(width: 54, height: 54)
-            .shadow(color: .black.opacity(0.28), radius: 16, y: 8)
+            .shadow(color: passOnOrange.opacity(0.30), radius: 16, y: 8)
         }
         .buttonStyle(.plain)
-        .help("Borrow context with PassOn")
+        .help("Relay context")
         .padding(4)
     }
 
@@ -64,14 +66,14 @@ struct PassOnRootView: View {
         HStack(spacing: 10) {
             ZStack {
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(Color.black)
+                    .fill(passOnOrange)
                 Image(systemName: "arrow.left.arrow.right")
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(.white)
             }
             .frame(width: 30, height: 30)
             VStack(alignment: .leading, spacing: 1) {
-                Text("PASS ON")
+                Text("RELAY")
                     .font(.system(size: 11, weight: .bold, design: .rounded))
                     .tracking(1.2)
                 Text("Context port")
@@ -83,7 +85,7 @@ struct PassOnRootView: View {
                 Circle()
                     .fill(model.serviceAvailable ? Color.green : Color.orange)
                     .frame(width: 6, height: 6)
-                Text(model.serviceAvailable ? "CORE" : "LOCAL")
+                Text(model.serviceAvailable ? model.serviceMode : "LOCAL")
                     .font(.system(size: 9, weight: .bold, design: .monospaced))
             }
             .foregroundStyle(.secondary)
@@ -102,9 +104,9 @@ struct PassOnRootView: View {
         HStack(spacing: 11) {
             Image(systemName: "doc.on.clipboard")
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(.blue)
+                .foregroundStyle(passOnOrange)
                 .frame(width: 34, height: 34)
-                .background(Color.blue.opacity(0.12), in: RoundedRectangle(cornerRadius: 9))
+                .background(passOnOrange.opacity(0.12), in: RoundedRectangle(cornerRadius: 9))
             VStack(alignment: .leading, spacing: 3) {
                 Text("Borrowing from")
                     .font(.system(size: 10, weight: .semibold))
@@ -147,7 +149,7 @@ struct PassOnRootView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 9)
                         .background(
-                            model.destination == destination ? Color.black : Color.primary.opacity(0.055),
+                            model.destination == destination ? passOnOrange : Color.primary.opacity(0.055),
                             in: RoundedRectangle(cornerRadius: 10, style: .continuous)
                         )
                     }
@@ -167,7 +169,7 @@ struct PassOnRootView: View {
                 Spacer()
                 Text("CAMP / H2")
                     .font(.system(size: 8, weight: .bold, design: .monospaced))
-                    .foregroundStyle(.purple)
+                    .foregroundStyle(passOnOrange)
             }
             HStack(spacing: 8) {
                 appNode(model.sourceApp, symbol: "square.on.square")
@@ -194,10 +196,10 @@ struct PassOnRootView: View {
             }
         }
         .padding(11)
-        .background(Color.purple.opacity(0.07), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+        .background(passOnOrange.opacity(0.07), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 13, style: .continuous)
-                .strokeBorder(Color.purple.opacity(0.16))
+                .strokeBorder(passOnOrange.opacity(0.18))
         }
     }
 
@@ -216,27 +218,27 @@ struct PassOnRootView: View {
 
     private var lineage: some View {
         HStack(spacing: 0) {
-            Circle().fill(Color.purple).frame(width: 6, height: 6)
-            Rectangle().fill(Color.purple.opacity(0.38)).frame(height: 1)
+            Circle().fill(passOnOrange).frame(width: 6, height: 6)
+            Rectangle().fill(passOnOrange.opacity(0.38)).frame(height: 1)
             ZStack {
-                Circle().fill(Color.purple.opacity(0.15))
+                Circle().fill(passOnOrange.opacity(0.15))
                 Image(systemName: "arrow.right")
                     .font(.system(size: 8, weight: .bold))
-                    .foregroundStyle(.purple)
+                    .foregroundStyle(passOnOrange)
             }
             .frame(width: 22, height: 22)
-            Rectangle().fill(Color.purple.opacity(0.38)).frame(height: 1)
-            Circle().fill(Color.purple).frame(width: 6, height: 6)
+            Rectangle().fill(passOnOrange.opacity(0.38)).frame(height: 1)
+            Circle().fill(passOnOrange).frame(width: 6, height: 6)
         }
         .frame(maxWidth: .infinity)
     }
 
     private func statusColor(_ state: TransferState) -> Color {
         switch state {
-        case .captured: return .orange
+        case .captured: return passOnOrange
         case .borrowed: return .green
         case .shared: return .blue
-        case .received: return .purple
+        case .received: return passOnOrange
         }
     }
 
@@ -280,7 +282,7 @@ struct PassOnRootView: View {
             .foregroundStyle(.white)
             .padding(.horizontal, 14)
             .frame(maxWidth: .infinity, minHeight: 44)
-            .background(Color.black, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .background(passOnOrange, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
         .buttonStyle(.plain)
         .disabled(model.capsule == nil)

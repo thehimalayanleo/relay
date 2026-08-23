@@ -1,0 +1,8 @@
+{"evidenceLabel":"WORKFLOW SIMULATION","step":0,"actor":"user-1-agent","action":"observe","result":"Starting frame recorded; two amber gates closed","status":"simulated_observation"}
+{"evidenceLabel":"WORKFLOW SIMULATION","step":1,"actor":"user-1-agent","action":"left","result":"Collision consumed one simulated life; environment reset","status":"simulated_rejected_action"}
+{"evidenceLabel":"WORKFLOW SIMULATION","step":2,"actor":"user-1-agent","action":"up","result":"Agent moved one cell; orientation remained east","status":"simulated_observation"}
+{"evidenceLabel":"WORKFLOW SIMULATION","step":3,"actor":"user-1-agent","action":"up","result":"Agent reached the cyan tile","status":"simulated_observation"}
+{"evidenceLabel":"WORKFLOW SIMULATION","step":4,"actor":"user-1-agent","action":"interact","result":"Both amber gates changed from closed to open","status":"simulated_observation"}
+{"evidenceLabel":"WORKFLOW SIMULATION","step":5,"actor":"user-1-agent","action":"right","result":"Agent advanced one cell toward the purple tile","status":"simulated_observation"}
+{"evidenceLabel":"WORKFLOW SIMULATION","step":6,"actor":"user-1-agent","action":"down","result":"Collision after cyan toggle consumed one simulated life; returned to last checkpoint","status":"simulated_rejected_action"}
+{"evidenceLabel":"WORKFLOW SIMULATION","step":7,"actor":"user-1-agent","action":"stop_and_handoff","result":"One life remains; purple tile effect is unresolved","status":"simulated_checkpoint"}

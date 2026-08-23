@@ -54,6 +54,26 @@ export class PassOnClient {
     }));
   }
 
+  async runAgent(shareUrl, target = "generic") {
+    const { origin, id, token } = parseShareUrl(shareUrl);
+    return responseBody(await this.fetch(`${origin}/v1/passons/${id}/agent/run`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ target }),
+    }));
+  }
+
+  async terminateWorkPod(shareUrl) {
+    const { origin, id, token } = parseShareUrl(shareUrl);
+    return responseBody(await this.fetch(`${origin}/v1/passons/${id}/pod/terminate`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}` },
+    }));
+  }
+
   async pull(shareUrl, target = "generic") {
     const [record, resumePrompt, workPod] = await Promise.all([
       this.read(shareUrl),

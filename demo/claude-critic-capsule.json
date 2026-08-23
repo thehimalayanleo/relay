@@ -1,0 +1,102 @@
+{
+  "title": "Adversarial product review: Relay",
+  "goal": "Determine whether Relay solves a painful, distinct problem and identify what must be cut or proven before tomorrow's demo.",
+  "acceptanceCriteria": [
+    "Give an unambiguous verdict: strong product, promising feature, or solution in search of a problem",
+    "Identify the single strongest user and incident wedge",
+    "Separate implemented behavior from demo simulation and roadmap",
+    "Name the three highest-leverage changes before the presentation"
+  ],
+  "state": {
+    "completed": [
+      "Built a native orange Relay.app with visible SAIL provider status",
+      "Implemented scoped capability URLs, SHA-256 capsule integrity, expiry, secret scanning, receipts, and work-pod lifecycle",
+      "Ran a real Sailbox create, pause, resume, pull, and terminate loop",
+      "Implemented A2A v1 SendMessage compatibility",
+      "Implemented an autonomous backend harness boundary",
+      "Implemented a Greptile finding adapter that converts findings into typed operational memories",
+      "Built a one-button Greptile demo that seals six memories and warm-boots User 2"
+    ],
+    "partial": [
+      "Greptile input is currently a structured local demo fixture unless an authenticated adapter secret is configured",
+      "The public product name is Relay while internal protocol and package identifiers still use PassOn",
+      "The current full Node test runner hits a Node 24 native assertion associated with the Sail SDK environment"
+    ],
+    "blocked": [
+      "A real Greptile-reviewed demo PR has not yet been connected",
+      "No measured token, turn, or wall-clock savings exist yet"
+    ]
+  },
+  "decisions": [
+    "Position Greptile as repository intelligence and Relay as cross-operator continuity",
+    "Do not claim Greptile is an incident pager",
+    "Borrow Engramme's proactive memory thesis but use bounded, task-owned, expiring operational memory",
+    "Label all fixture-driven Greptile input as simulated"
+  ],
+  "constraints": [
+    "Tomorrow's judge demo must fit in three minutes",
+    "Never expose Sail keys, Greptile keys, capability tokens, or private repository content",
+    "The demo must show the actual Relay app, actual work-pod state, same digest, and User 2 receipt",
+    "No unsupported claims about benchmark scores or measured savings"
+  ],
+  "rejectedApproaches": [
+    "A generic handoff form",
+    "A transcript-only export",
+    "Calling a static mock a live integration",
+    "Positioning Relay as another general-purpose personal memory database"
+  ],
+  "openQuestions": [
+    "Is a cross-human and cross-agent incident handoff frequent and painful enough to support a company?",
+    "Is Relay a product, a protocol, or a feature Greptile and coding-agent vendors will absorb?",
+    "What is the smallest wedge that proves repeated use?",
+    "Does selected operational memory beat a strong generated summary under controlled evaluation?",
+    "Should the demo emphasize investigation handoff, PR ownership transfer, or autonomous long-horizon continuation?"
+  ],
+  "artifacts": [
+    {
+      "label": "Architecture",
+      "uri": "ARCHITECTURE.md",
+      "status": "verified"
+    },
+    {
+      "label": "Greptile YC demo script",
+      "uri": "demo/greptile-sev-yc-script.md",
+      "status": "verified"
+    },
+    {
+      "label": "Greptile adapter",
+      "uri": "src/greptile.mjs",
+      "status": "verified"
+    },
+    {
+      "label": "One-button demo",
+      "uri": "public/greptile-demo.html",
+      "status": "verified"
+    }
+  ],
+  "validation": [
+    {
+      "command": "Browser: Relay Greptile finding → Resume as User 2",
+      "result": "Six memories sealed, SHA-256 digest shown, Codex acceptance receipt issued, no browser errors",
+      "status": "passed"
+    },
+    {
+      "command": "node --test tests/greptile.test.mjs",
+      "result": "Two pure adapter tests pass; server test is blocked by a Node 24 native runtime assertion",
+      "status": "blocked"
+    }
+  ],
+  "traceSummary": "Be hostile to the thesis. Inspect the repository, distinguish working software from narrative, compare against Greptile Fix with Agent, Greptile MCP, Claude-Mem, Letta, and ordinary markdown handoffs, and recommend killing the project if the wedge is not real.",
+  "nextAction": "Read the listed artifacts, run the demo locally if useful, then write a one-page investment and product critique with a go/no-go verdict.",
+  "stopConditions": [
+    "Do not propose more infrastructure until the target user and repeated workflow are clear",
+    "Do not accept simulated integration evidence as proof of user demand"
+  ],
+  "source": {
+    "harness": "codex",
+    "model": "gpt-5.6",
+    "actor": "ajinkya-and-codex",
+    "taskId": "relay-hackathon-critic"
+  },
+  "intendedRecipient": "claude"
+}

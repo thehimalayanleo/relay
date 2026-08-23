@@ -1,0 +1,88 @@
+{
+  "title": "[WORKFLOW SIMULATION] Resume an ARC-AGI-3-like interactive puzzle",
+  "goal": "Continue a simulated interactive grid puzzle from User 1 in Docker to User 2 on macOS without losing the observed mechanics, tested actions, or remaining uncertainty.",
+  "acceptanceCriteria": [
+    "User 2 can restate the two observed mechanics before taking another action",
+    "User 2 does not repeat the two known losing actions",
+    "The next action is chosen from the recorded state rather than from an invented full solution",
+    "Any autonomous 5090 run writes its proposal back to the same work pod for review"
+  ],
+  "state": {
+    "completed": [
+      "User 1 launched the simulated puzzle inside a Docker-based agent harness",
+      "Observed that touching the cyan tile toggles the two amber gates",
+      "Observed that the green marker moves one cell per action and preserves orientation"
+    ],
+    "partial": [
+      "A route to the upper-right goal may require toggling the cyan tile exactly once",
+      "The purple tile appears relevant but its effect has not been isolated"
+    ],
+    "blocked": [
+      "The final route is not known and no benchmark environment is connected in this fixture"
+    ]
+  },
+  "decisions": [
+    "Transfer observations and action history, not a claimed solution",
+    "Keep the Sailbox paused between operators and resume it only when the recipient pulls context",
+    "Treat an optional Qwen3-Coder run as a proposal generator, not an authoritative solver"
+  ],
+  "constraints": [
+    "This is a workflow simulation using an ARC-AGI-3-like puzzle, not an official ARC-AGI-3 task",
+    "Do not report a score, success rate, or benchmark result from this fixture",
+    "Do not repeat action left from the starting state or action down after the first cyan toggle because both consumed a life in the simulation",
+    "Verify the live puzzle state before applying any inherited action"
+  ],
+  "rejectedApproaches": [
+    "Random action search was rejected after two simulated life losses",
+    "Inferring that every colored tile is a goal was rejected because the cyan tile changed gates instead"
+  ],
+  "openQuestions": [
+    "Does the purple tile rotate the agent, move a gate, or only change score?",
+    "Is a second cyan toggle needed after passing the lower amber gate?",
+    "Does the live state still match the final frame captured by User 1?"
+  ],
+  "artifacts": [
+    {
+      "label": "Simulated final grid frame from User 1",
+      "uri": "demo/fixtures/arc-like-frame-user1.json",
+      "digest": "sha256:a0af56b3a0d40bd24ebd98e547b7cd8a37554eaa36221628aa128b0841746367",
+      "status": "verified"
+    },
+    {
+      "label": "Simulated action and observation trace",
+      "uri": "demo/fixtures/arc-like-trace-user1.jsonl",
+      "digest": "sha256:f7e1571ac1962c908aa059b9455578f8cdade637d1cd1ad1184d33b8942bacb0",
+      "status": "verified"
+    }
+  ],
+  "validation": [
+    {
+      "command": "node bin/passon.mjs create demo/arc-agi-3-scenario.json --pod",
+      "result": "Storyboard command only; run during the live demo to create the Sail-backed handoff",
+      "status": "not_run"
+    },
+    {
+      "command": "node bin/passon.mjs pull '<share-url>' --target codex",
+      "result": "Storyboard command only; run on the recipient Mac to verify the transferred capsule and work pod",
+      "status": "not_run"
+    }
+  ],
+  "sideEffects": [
+    "The live demo will create a capability link and a Sailbox when PassOn is configured with Sail",
+    "The optional autonomous run may write a proposal artifact into the work pod"
+  ],
+  "traceSummary": "WORKFLOW SIMULATION ONLY. User 1 explored an invented ARC-AGI-3-like grid in a Docker agent harness. Two mechanics were observed: the cyan tile toggles amber gates, and the green marker advances one cell while preserving orientation. Two actions lost simulated lives and must not be repeated. The purple tile remains unexplained. No official task, evaluation server, score, or benchmark result is represented here.",
+  "nextAction": "On macOS, pull the capability link, compare the live puzzle state with User 1's last frame, restate the known mechanics, then test one controlled action that isolates the purple tile's effect.",
+  "stopConditions": [
+    "Stop if the live puzzle state differs from User 1's recorded final frame",
+    "Stop before the last remaining simulated life would be consumed",
+    "Stop if any output is presented as an official ARC-AGI-3 result"
+  ],
+  "source": {
+    "harness": "docker-simulated-agent",
+    "model": "scenario-fixture-no-model-run",
+    "actor": "user-1",
+    "taskId": "arc-like-passon-demo-001"
+  },
+  "intendedRecipient": "user-2-macos-or-optional-5090-agent"
+}

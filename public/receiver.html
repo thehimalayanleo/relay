@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Receive PassOn</title>
+    <title>Receive Relay</title>
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
@@ -17,7 +17,11 @@
         <div id="summary" class="summary"></div>
         <div id="pod-card" class="pod-card" hidden>
           <div><p class="step">WORK POD</p><strong id="pod-title">Ready to pull</strong><small id="pod-detail"></small></div>
-          <button id="pull-pod" type="button">Pull pod context</button>
+          <div class="pod-actions">
+            <button id="pull-pod" type="button">Pull pod context</button>
+            <button id="run-agent" type="button">Run configured agent</button>
+            <button id="terminate-pod" class="secondary-action" type="button">Terminate</button>
+          </div>
         </div>
         <div class="adapter-row">
           <label>Resume in

@@ -1,19 +1,30 @@
 import { createServer as createHttpServer } from "node:http";
+import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { promisify } from "node:util";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createRecord, assertReadable, publicRecord } from "./protocol.mjs";
 import { FileStore } from "./store.mjs";
 import { renderPrompt, SUPPORTED_TARGETS } from "./adapters.mjs";
 import { estimateCost } from "./cost.mjs";
-import { LocalWorkPodProvider } from "./workpods.mjs";
+import { createWorkPodProvider } from "./workpods.mjs";
+import { ConfiguredAgentRunner } from "./agent-runner.mjs";
+import { a2aErrorResponse, createA2aAgentCard, handleA2aJsonRpc } from "./a2a.mjs";
+import { greptileHandoffCapsule } from "./greptile.mjs";
+import { GreptileMcpClient } from "./greptile-mcp.mjs";
+import { findingFromGreptileComment, improvementLoopDecision } from "./improvement-loop.mjs";
 
 const sourceDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.dirname(sourceDir);
 const publicRoot = path.join(projectRoot, "public");
+const execFileAsync = promisify(execFile);
 
 const staticFiles = new Map([
   ["/", ["index.html", "text/html; charset=utf-8"]],
+  ["/demo/greptile", ["greptile-demo.html", "text/html; charset=utf-8"]],
+  ["/greptile-demo.js", ["greptile-demo.js", "text/javascript; charset=utf-8"]],
+  ["/bug-ledger.json", ["bug-ledger.json", "application/json; charset=utf-8"]],
   ["/receiver", ["receiver.html", "text/html; charset=utf-8"]],
   ["/styles.css", ["styles.css", "text/css; charset=utf-8"]],
   ["/app.js", ["app.js", "text/javascript; charset=utf-8"]],
@@ -37,6 +48,13 @@ function sendError(response, error) {
     EXPIRED: 410,
     INTEGRITY_FAILURE: 409,
     SECRET_DETECTED: 422,
+    AGENT_NOT_CONFIGURED: 503,
+    SAIL_NOT_CONFIGURED: 503,
+    POD_UNAVAILABLE: 503,
+    GREPTILE_NOT_CONFIGURED: 503,
+    GREPTILE_UNAVAILABLE: 503,
+    GREPTILE_MCP_ERROR: 502,
+    GREPTILE_TOOL_ERROR: 502,
   };
   sendJson(response, statusByCode[error.code] ?? 400, {
     error: error.code ?? "BAD_REQUEST",
@@ -69,6 +87,11 @@ function externalOrigin(request, url) {
   return `${protocol}://${host}`;
 }
 
+function isLoopback(request) {
+  const address = request.socket.remoteAddress ?? "";
+  return address === "127.0.0.1" || address === "::1" || address === "::ffff:127.0.0.1";
+}
+
 function receiptFrom(body, record, now = new Date()) {
   const actor = typeof body.actor === "string" ? body.actor.trim() : "recipient";
   const harness = typeof body.harness === "string" ? body.harness.trim() : "generic";
@@ -96,10 +119,14 @@ export async function createPassOnServer(options = {}) {
     options.dataDir ?? process.env.PASS_ON_DATA_DIR ?? path.join(projectRoot, ".data"),
   );
   await store.init();
-  const workPodProvider = options.workPodProvider ?? new LocalWorkPodProvider(
-    options.podDir ?? process.env.PASS_ON_POD_DIR ?? path.join(projectRoot, ".pods"),
-  );
+  const workPodProvider = options.workPodProvider ?? createWorkPodProvider({
+    mode: options.workPodMode,
+    podDir: options.podDir ?? process.env.PASS_ON_POD_DIR ?? path.join(projectRoot, ".pods"),
+    sail: options.sail,
+  });
   await workPodProvider.init();
+  const agentRunner = options.agentRunner ?? new ConfiguredAgentRunner();
+  const greptileClient = options.greptileClient ?? new GreptileMcpClient();
   const corsOrigin = options.corsOrigin ?? process.env.PASS_ON_CORS_ORIGIN ?? "*";
 
   return createHttpServer(async (request, response) => {
@@ -126,7 +153,240 @@ export async function createPassOnServer(options = {}) {
       }
 
       if (request.method === "GET" && url.pathname === "/health") {
-        sendJson(response, 200, { ok: true, protocol: "passon/v1" });
+        sendJson(response, 200, {
+          ok: true,
+          protocol: "passon/v1",
+          workPod: workPodProvider.status(),
+          autonomousAgent: agentRunner.status(),
+          integrations: {
+            greptile: {
+              adapterSecretConfigured: Boolean(process.env.GREPTILE_RELAY_SECRET),
+              apiKeyConfigured: Boolean(process.env.GREPTILE_API_KEY),
+              liveApiConnected: false,
+              transport: "finding-adapter",
+            },
+          },
+        });
+        return;
+      }
+
+      if (request.method === "GET" && url.pathname === "/v1/demo/arc-run") {
+        const runPath = process.env.RELAY_ARC_RUN_PATH
+          ?? path.join(projectRoot, "..", "relay-arc-agi-3", "artifacts", "live-episode.json");
+        const run = JSON.parse(await readFile(runPath, "utf-8"));
+        sendJson(response, 200, {
+          ...run,
+          claimBoundary: "ARC-AGI-3-compatible demonstration; not an official benchmark score.",
+        });
+        return;
+      }
+
+      if (request.method === "POST" && url.pathname === "/v1/demo/arc-tests") {
+        const arcRoot = process.env.RELAY_ARC_REPO
+          ?? path.join(projectRoot, "..", "relay-arc-agi-3");
+        const { stdout, stderr } = await execFileAsync("python3", ["tests/run_tests.py"], {
+          cwd: arcRoot,
+          timeout: 30_000,
+          maxBuffer: 256_000,
+        });
+        const passed = [...stdout.matchAll(/^PASS /gm)].length;
+        const failed = [...stdout.matchAll(/^FAIL /gm)].length;
+        sendJson(response, failed ? 500 : 200, {
+          status: failed ? "failed" : "passed",
+          passed,
+          failed,
+          output: `${stdout}${stderr}`.trim(),
+        });
+        return;
+      }
+
+      if (request.method === "GET" && url.pathname === "/v1/integrations/greptile/status") {
+        const initialized = await greptileClient.initialize();
+        sendJson(response, 200, {
+          configured: greptileClient.configured(),
+          liveApiConnected: initialized?.serverInfo?.name === "Greptile MCP Server",
+          transport: "mcp",
+          server: initialized?.serverInfo ?? null,
+          protocolVersion: initialized?.protocolVersion ?? null,
+        });
+        return;
+      }
+
+      if (request.method === "GET" && url.pathname === "/v1/integrations/greptile/pull-requests") {
+        const limit = Math.min(20, Math.max(1, Number(url.searchParams.get("limit") ?? 10)));
+        const result = await greptileClient.listOpenPullRequests(limit);
+        sendJson(response, 200, { liveApiConnected: true, transport: "mcp", result });
+        return;
+      }
+
+      if (request.method === "POST" && url.pathname === "/v1/integrations/greptile/comments") {
+        const body = await readJson(request);
+        const name = typeof body.name === "string" ? body.name.trim() : "";
+        const prNumber = Number(body.prNumber);
+        if (!name || !Number.isInteger(prNumber) || prNumber <= 0) {
+          throw new Error("name and a positive integer prNumber are required.");
+        }
+        const result = await greptileClient.listGreptileComments({
+          name,
+          prNumber,
+          remote: body.remote,
+          defaultBranch: body.defaultBranch,
+        });
+        sendJson(response, 200, { liveApiConnected: true, transport: "mcp", result });
+        return;
+      }
+
+      if (request.method === "POST" && url.pathname === "/v1/integrations/greptile/improve") {
+        const body = await readJson(request);
+        const context = {
+          name: typeof body.name === "string" ? body.name.trim() : "",
+          remote: body.remote ?? "github",
+          defaultBranch: body.defaultBranch ?? "main",
+          branch: typeof body.branch === "string" ? body.branch.trim() : "",
+          prNumber: Number(body.prNumber),
+        };
+        if (!context.name || !Number.isInteger(context.prNumber) || context.prNumber <= 0) {
+          throw new Error("name and a positive integer prNumber are required.");
+        }
+        if (body.triggerReview === true) {
+          const review = await greptileClient.triggerCodeReview(context);
+          sendJson(response, 202, {
+            status: "review-triggered",
+            transport: "mcp",
+            next: "Call this endpoint again without triggerReview after Greptile completes the review.",
+            review,
+          });
+          return;
+        }
+
+        const commentResult = await greptileClient.listGreptileComments(context);
+        const decision = improvementLoopDecision({
+          comments: commentResult,
+          iteration: body.iteration,
+          maxIterations: body.maxIterations,
+        });
+        if (decision.status !== "action-required") {
+          sendJson(response, 200, { ...decision, transport: "mcp", repository: context.name, prNumber: context.prNumber });
+          return;
+        }
+
+        const finding = findingFromGreptileComment(decision.comment, context);
+        const capsule = greptileHandoffCapsule({
+          finding,
+          goal: `Resolve Greptile feedback on ${context.name} PR #${context.prNumber}.`,
+          investigation: {
+            constraints: [
+              `Recursive improvement iteration ${decision.iteration} of ${decision.maxIterations}.`,
+              "Stop when Greptile has no unresolved comments or the iteration budget is exhausted.",
+            ],
+            nextAction: "Reproduce or validate the finding before editing, then implement the smallest safe patch.",
+          },
+          acceptanceCriteria: [
+            "Relevant tests pass",
+            "Greptile re-review reports this comment addressed",
+            "No new higher-severity Greptile finding is introduced",
+          ],
+        }, { trustedAdapter: true });
+        const { record, token } = createRecord(capsule, { ttlHours: 24 });
+        record.workPod = await workPodProvider.create({
+          id: record.id,
+          capsule: record.capsule,
+          digest: record.digest,
+        });
+        try {
+          await store.create(record);
+        } catch (error) {
+          await workPodProvider.terminate(record.workPod).catch(() => {});
+          throw error;
+        }
+        const origin = externalOrigin(request, url);
+        sendJson(response, 201, {
+          status: "handoff-created",
+          loop: {
+            iteration: decision.iteration,
+            maxIterations: decision.maxIterations,
+            remainingFindings: decision.remainingFindings,
+          },
+          id: record.id,
+          digest: record.digest,
+          shareUrl: `${origin}/receiver#id=${encodeURIComponent(record.id)}&token=${encodeURIComponent(token)}`,
+          workPod: record.workPod,
+          transport: "mcp",
+        });
+        return;
+      }
+
+      if (request.method === "POST" && url.pathname === "/v1/integrations/greptile/handoffs") {
+        const configuredSecret = process.env.GREPTILE_RELAY_SECRET ?? "";
+        const suppliedSecret = request.headers["x-relay-integration-secret"] ?? "";
+        const authenticated = Boolean(configuredSecret) && suppliedSecret === configuredSecret;
+        if (!authenticated && !isLoopback(request)) {
+          const error = new Error("Greptile adapter requires a valid integration secret.");
+          error.code = "FORBIDDEN";
+          throw error;
+        }
+        const body = await readJson(request);
+        const capsule = greptileHandoffCapsule(body, { trustedAdapter: authenticated });
+        const ttlHours = Number(body.ttlHours ?? 24);
+        if (!(ttlHours > 0 && ttlHours <= 168)) throw new Error("ttlHours must be between 0 and 168.");
+        const { record, token } = createRecord(capsule, { ttlHours });
+        record.workPod = await workPodProvider.create({
+          id: record.id,
+          capsule: record.capsule,
+          digest: record.digest,
+        });
+        try {
+          await store.create(record);
+        } catch (error) {
+          await workPodProvider.terminate(record.workPod).catch(() => {});
+          throw error;
+        }
+        const origin = externalOrigin(request, url);
+        sendJson(response, 201, {
+          id: record.id,
+          digest: record.digest,
+          expiresAt: record.expiresAt,
+          token,
+          shareUrl: `${origin}/receiver#id=${encodeURIComponent(record.id)}&token=${encodeURIComponent(token)}`,
+          workPod: record.workPod,
+          integration: {
+            source: "greptile",
+            mode: authenticated ? "trusted-adapter-input" : "local-demo",
+            liveApiConnected: false,
+            memories: record.capsule.memories.length,
+          },
+        });
+        return;
+      }
+
+      if (["GET", "HEAD"].includes(request.method) && url.pathname === "/.well-known/agent-card.json") {
+        const card = createA2aAgentCard(externalOrigin(request, url));
+        const body = `${JSON.stringify(card)}\n`;
+        response.writeHead(200, {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": "public, max-age=300",
+          etag: `W/\"passon-a2a-${card.version}\"`,
+        });
+        response.end(request.method === "HEAD" ? undefined : body);
+        return;
+      }
+
+      if (request.method === "POST" && url.pathname === "/a2a") {
+        let body;
+        try {
+          body = await readJson(request);
+        } catch {
+          sendJson(response, 200, a2aErrorResponse(null, -32700, "Invalid JSON payload", {
+            reason: "JSON_PARSE_ERROR",
+          }));
+          return;
+        }
+        const version = request.headers["a2a-version"] ?? url.searchParams.get("A2A-Version") ?? "0.3";
+        sendJson(response, 200, await handleA2aJsonRpc(body, {
+          store,
+          workPodProvider,
+          agentRunner,
+        }, { version }));
         return;
       }
 
@@ -142,7 +402,12 @@ export async function createPassOnServer(options = {}) {
             digest: record.digest,
           });
         }
-        await store.create(record);
+        try {
+          await store.create(record);
+        } catch (error) {
+          if (record.workPod) await workPodProvider.terminate(record.workPod).catch(() => {});
+          throw error;
+        }
         const origin = externalOrigin(request, url);
         const shareUrl = `${origin}/receiver#id=${encodeURIComponent(record.id)}&token=${encodeURIComponent(token)}`;
         sendJson(response, 201, {
@@ -164,7 +429,68 @@ export async function createPassOnServer(options = {}) {
           error.code = "NOT_FOUND";
           throw error;
         }
-        sendJson(response, 200, await workPodProvider.pull(record.workPod));
+        const pulled = await workPodProvider.pull(record.workPod);
+        const { camp, handoff, ...metadata } = pulled;
+        await store.update(record.id, (current) => ({ ...current, workPod: metadata }));
+        sendJson(response, 200, { ...metadata, camp, handoff });
+        return;
+      }
+
+      const terminatePodMatch = url.pathname.match(/^\/v1\/passons\/([0-9a-f-]{36})\/pod\/terminate$/i);
+      if (request.method === "POST" && terminatePodMatch) {
+        const token = requestToken(request, url);
+        let terminated;
+        const updated = await store.update(terminatePodMatch[1], async (record) => {
+          assertReadable(record, token);
+          if (!record.workPod) {
+            const error = new Error("This pass-on has no work pod.");
+            error.code = "NOT_FOUND";
+            throw error;
+          }
+          terminated = await workPodProvider.terminate(record.workPod);
+          return { ...record, workPod: terminated };
+        });
+        if (!updated) {
+          const error = new Error("Pass-on not found.");
+          error.code = "NOT_FOUND";
+          throw error;
+        }
+        sendJson(response, 200, { workPod: terminated });
+        return;
+      }
+
+      const agentRunMatch = url.pathname.match(/^\/v1\/passons\/([0-9a-f-]{36})\/agent\/run$/i);
+      if (request.method === "POST" && agentRunMatch) {
+        const token = requestToken(request, url);
+        const body = await readJson(request);
+        const record = assertReadable(await store.get(agentRunMatch[1]), token);
+        if (!record.workPod) {
+          const error = new Error("Autonomous continuation requires a work pod.");
+          error.code = "NOT_FOUND";
+          throw error;
+        }
+        const target = typeof body.target === "string" ? body.target : "generic";
+        if (!SUPPORTED_TARGETS.includes(target)) throw new Error(`Unsupported target: ${target}`);
+        const rendered = renderPrompt(record, target);
+        const prompt = body.demo === true
+          ? `${rendered}\n\nStage demonstration: do not inspect files or use tools. In no more than three short sentences, state the problem, the constraint, and the next action you inherited.`
+          : rendered;
+        const result = await agentRunner.run(prompt);
+        const workPod = await workPodProvider.storeAgentResult(record.workPod, result);
+        const runSummary = {
+          id: result.id,
+          harness: result.harness,
+          completedAt: result.completedAt,
+          exitCode: result.exitCode,
+          artifact: `agents/${result.id}.json`,
+        };
+        await store.update(record.id, (current) => ({
+          ...current,
+          status: result.exitCode === 0 ? "agent-completed" : "agent-failed",
+          workPod,
+          agentRuns: [...(current.agentRuns ?? []), runSummary],
+        }));
+        sendJson(response, 201, { status: result.exitCode === 0 ? "agent-completed" : "agent-failed", result, workPod });
         return;
       }
 
@@ -224,12 +550,12 @@ async function main() {
   const port = Number(process.env.PORT ?? 4317);
   const server = await createPassOnServer();
   server.listen(port, host, () => {
-    console.log(`PassOn listening at http://${host}:${port}`);
-    if (host === "0.0.0.0") console.log("Warning: auth is not implemented. Put PassOn behind a trusted gateway.");
+    console.log(`Relay listening at http://${host}:${port}`);
+    if (host === "0.0.0.0") console.log("Warning: auth is not implemented. Put Relay behind a trusted gateway.");
   });
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   main().catch((error) => {
     console.error(error);
     process.exitCode = 1;

@@ -2,15 +2,17 @@
 
 **Move the work loop, not just the transcript.**
 
-[![Relay transfers a live SEV handoff from User 1 to User 2](./docs/assets/relay-sev-handoff.gif)](https://www.loom.com/share/908095a693e44b4db042c9ea254a9d9a)
+[![Relay transfers an active investigation from User 1 to User 2](./docs/assets/relay-sev-handoff.gif)](https://www.loom.com/share/908095a693e44b4db042c9ea254a9d9a)
 
-*A compressed, silent preview of the full [Relay SEV demo](https://www.loom.com/share/908095a693e44b4db042c9ea254a9d9a).*
+*A compressed, silent preview of the full [Relay investigation demo](https://www.loom.com/share/908095a693e44b4db042c9ea254a9d9a).*
 
 Many production bugs are not isolated coding tasks. They depend on tribal knowledge spread across teams, tools, and prior decisions, and the hardest cases can take one to three days to resolve. Coding agents make an individual developer faster, but today each agent usually works inside one person's environment with its own context, filesystem, and understanding of the task. That makes genuine parallel human-agent collaboration difficult.
 
-PassOn makes the human-agent work loop portable. A developer can package the verified objective, decisions, constraints, artifacts, and next safe action into a bounded handoff, optionally attach a persistent work environment, and pass control to another developer or a standalone agent. The recipient resumes from the same execution state without replaying the whole chat or reconstructing the team's tribal knowledge.
+Relay makes the human-agent work loop portable. A developer can package the verified objective, evidence, decisions, constraints, failed approaches, and next safe action into a bounded handoff, optionally attach a persistent work environment, and pass control to another developer or a standalone agent. The recipient resumes at the investigation frontier without replaying the whole chat or reconstructing the team's tribal knowledge.
 
-PassOn is a small, vendor-neutral continuation protocol. It sends a verified checkpoint and an acceptance receipt instead of treating a chat transcript as executable state.
+The initial wedge is shift changes and cross-team ownership transfers during production incidents. Greptile can supply code intelligence; Relay preserves the operational work required to act on it.
+
+Relay is a small, vendor-neutral continuation protocol. It sends a verified checkpoint and an acceptance receipt instead of treating a chat transcript as executable state.
 
 The current release is a local or trusted-network prototype. It has no user accounts. Every pass-on gets a random 256-bit capability URL, expires after 72 hours by default, and is stored as a private local JSON file. Put it behind an authenticated gateway before exposing it to the public internet.
 
@@ -29,7 +31,39 @@ The current release is a local or trusted-network prototype. It has no user acco
 - Real Sailbox provider that writes the CAMP bundle, pauses while waiting, resumes on pull, and terminates on request.
 - Backend-configured autonomous harness runner for no-human continuation.
 
-This is not yet a full environment checkpoint. Repository snapshots, sandbox images, delegated service capabilities, SSO, revocation, and trace-store connectors remain production work.
+This is not a full environment checkpoint. It transfers CAMP and handoff context, not repository or filesystem state. Repository snapshots, sandbox images, delegated service capabilities, SSO, revocation, and trace-store connectors remain production work.
+
+## What the demo proves
+
+Open `http://127.0.0.1:4317/demo/greptile` after starting Relay Core.
+
+- A structured code-review finding and the human-agent investigation become typed operational memory.
+- Relay seals that memory with a SHA-256 digest in a local pod or real Sailbox.
+- User 2 restores the same memory set and issues an acceptance receipt bound to that digest.
+- The UI labels fixture input, local pods, and real Sailboxes distinctly.
+
+The demo does not claim that Greptile is live unless an authenticated adapter supplied the finding. It also does not claim token or resolution-time savings. Those require the controlled evaluation described below.
+
+### Live Greptile MCP
+
+Relay connects to Greptile through the official MCP server rather than an invented REST endpoint. Configure `GREPTILE_API_KEY` on the backend and use:
+
+```text
+GET  /v1/integrations/greptile/status
+GET  /v1/integrations/greptile/pull-requests?limit=10
+POST /v1/integrations/greptile/comments
+POST /v1/integrations/greptile/improve
+```
+
+The comments request accepts `name`, `prNumber`, `remote`, and `defaultBranch`, then retrieves unresolved Greptile-generated comments. The browser never receives the API key. The deterministic presentation finding remains explicitly labeled even when the MCP connection is live.
+
+The improvement endpoint implements a bounded review loop for any active engineering investigation:
+
+```text
+Greptile review -> Relay handoff -> human or agent patch -> Greptile re-review
+```
+
+It stops when no unresolved Greptile comments remain or after a frozen maximum of five iterations. `triggerReview: true` explicitly asks Greptile to review; omitting it performs a read-only check and creates a verified Relay handoff only when action is required. Relay records the iteration budget and stop condition inside the handoff so an autonomous harness cannot recurse silently.
 
 See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the stack, integration boundary, and Sailbox path.
 
@@ -55,7 +89,7 @@ security add-generic-password -U -a "$USER" -s passon-sail-api-key -w "$SAIL_KEY
 unset SAIL_KEY
 ```
 
-Start PassOn with the key injected only into the backend process:
+Start Relay with the key injected only into the backend process:
 
 ```bash
 SAIL_API_KEY="$(security find-generic-password -a "$USER" -s passon-sail-api-key -w)" npm run start:sail
@@ -64,7 +98,7 @@ node bin/passon.mjs doctor
 
 The health response should report `"provider": "sail"`. Creating a handoff with `--pod` now creates a private Sailbox, writes the three context files under `/opt/passon/handoffs/<id>`, and pauses the VM. Pulling the handoff resumes it.
 
-The native floating button lives in [`apps/macos`](./apps/macos). It captures an explicit clipboard selection, renders it for Codex, Claude, or Cursor, and can ask PassOn Core to create the same capability link and work pod.
+The native floating button lives in [`apps/macos`](./apps/macos). It captures an explicit clipboard selection, renders it for Codex, Claude, or Cursor, and can ask Relay Core to create the same capability link and work pod.
 
 Create a pass-on from another harness:
 
@@ -79,7 +113,7 @@ The response contains a capability `shareUrl`. Paste it into an approved channel
 The CLI is designed as the orchestration surface for agents and shell workflows. Structured commands emit JSON to stdout, errors use stderr and a nonzero exit code, and `--quiet` emits only the capability URL.
 
 ```bash
-# Confirm that PassOn Core is reachable
+# Confirm that Relay Core is reachable
 node bin/passon.mjs doctor
 
 # Turn notes or another command's output into a one-button equivalent
@@ -153,7 +187,7 @@ The local pod is not a remote CPU and cannot be reached from another laptop unle
 
 ## Autonomous continuation and a 5090 model
 
-PassOn can hand the sealed resume prompt to one operator-configured command. The capability holder chooses only the renderer, never the command. Configure the command as a JSON argv array:
+Relay can hand the sealed resume prompt to one operator-configured command. The capability holder chooses only the renderer, never the command. Configure the command as a JSON argv array:
 
 ```bash
 export PASS_ON_AGENT_HARNESS="deepseek-5090"
@@ -239,4 +273,4 @@ Before public or company-wide deployment, add:
 - Rate limiting and abuse controls.
 - A measured cross-model resume benchmark.
 
-PassOn should remain the continuation protocol. Harness-specific skills and plugins should be thin adapters, never the source of truth.
+Relay should remain the continuation protocol. Harness-specific skills and plugins should be thin adapters, never the source of truth.
