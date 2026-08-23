@@ -55,6 +55,8 @@ const session = await request(`/v1/sessions/${created.id}`, { headers });
 const agentRun = session.agentRuns.at(-1);
 
 if (session.brief.constraint !== feedback) throw new Error("Sanjana's feedback was not preserved in the shared brief.");
+if (session.brief.acceptance !== "Both SWEs see the same state, evidence, and next action.") throw new Error("The session retained stale PM language.");
+if (!session.activity.some((event) => event.actor === "Sanjana" && event.value === "Implement Sanjana's fresh-reset replay guard, then run the ARC harness tests.")) throw new Error("Sanjana's exact edit was not retained in the activity stream.");
 if (agentRun.inheritedContext?.constraint !== feedback) throw new Error("The continuing agent did not inherit Sanjana's exact feedback.");
 if (!agentRun.response) throw new Error("The continuing agent response was not retained.");
 if (agentRun.sailboxId !== checkpoint.workPod.sailboxId) throw new Error("The agent did not continue from the shared Sailbox.");

@@ -23,15 +23,18 @@ function renderSessions() {
 
 function renderFeed() {
   const exactRuns = (snapshot.agentRuns ?? []).filter((run) => run.exitCode === 0 && run.response && run.response !== "OpenCode completed with no text response.");
-  const runs = exactRuns.length ? exactRuns.slice(-2) : (snapshot.agentRuns ?? []).slice(-2);
+  const runs = exactRuns.length ? exactRuns.slice(-1) : (snapshot.agentRuns ?? []).slice(-1);
+  const collaboratorEdit = [...(snapshot.activity ?? [])].reverse().find((event) => event.type === "edit" && event.actor === "Sanjana");
+  const editHtml = collaboratorEdit ? `<article class="event"><div class="avatar">S</div><div class="bubble"><strong>Sanjana · SWE</strong><time>${new Date(collaboratorEdit.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time><span class="inherited">Added to the shared agent stack</span><div class="agent-response">${esc(collaboratorEdit.value || snapshot.brief.implementation)}</div></div></article>` : "";
   if (runs.length) {
-    byId("feed").innerHTML = runs.map((run) => {
+    byId("feed").innerHTML = editHtml + runs.map((run) => {
       const inherited = run.inheritedContext ? `Inherited: ${run.inheritedContext.problem} Constraint: ${run.inheritedContext.constraint} Next: ${run.inheritedContext.nextAction}` : "This legacy run did not retain its prompt text.";
       const response = run.response || "This legacy run completed successfully, but its exact response was not retained. New runs preserve the full wording here.";
       return `<article class="event"><div class="avatar">${esc((run.requestedBy || "A")[0])}</div><div class="bubble"><strong>${esc(run.requestedBy || "Agent")}</strong><time>${new Date(run.completedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time><span class="inherited">${esc(inherited)}</span><div class="agent-response">${esc(response)}</div></div></article>`;
     }).join("");
     return;
   }
+  if (editHtml) { byId("feed").innerHTML = editHtml; return; }
   const event = snapshot.activity?.at(-1);
   byId("feed").innerHTML = event ? `<article class="event"><div class="avatar">${esc((event.actor || "R")[0])}</div><div class="bubble"><strong>${esc(event.actor || "Relay")}</strong><p>${esc(event.detail)}</p></div></article>` : "";
 }

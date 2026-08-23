@@ -139,7 +139,7 @@ export class SessionService {
       brief: {
         problem: title,
         constraint: "Preserve verified context and keep agent execution serialized.",
-        acceptance: "PM and SWE see the same state, evidence, and next action.",
+        acceptance: "Both SWEs see the same state, evidence, and next action.",
         implementation: "Review the shared brief, then queue the next safe action.",
       },
       activity: [],
@@ -204,7 +204,7 @@ export class SessionService {
       record.brief[field] = text(input.value);
       record.version += 1;
       record.updatedAt = this.now().toISOString();
-      const event = { id: randomUUID(), type: "edit", actor, detail: `updated ${field}`, at: record.updatedAt, version: record.version };
+      const event = { id: randomUUID(), type: "edit", actor, detail: `updated ${field}`, value: record.brief[field], at: record.updatedAt, version: record.version };
       const previous = record.activity.at(-1);
       if (previous?.type === "edit" && previous.actor === actor && previous.detail === event.detail) record.activity[record.activity.length - 1] = event;
       else record.activity.push(event);
