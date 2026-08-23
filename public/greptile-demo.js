@@ -1,6 +1,6 @@
 const byId = (id) => document.getElementById(id);
 const RECENTS_KEY = "relay.sessions.v1";
-let active, snapshot, stream, transfer, editTimer, presenceTimer, memoryTimer, memoryContext;
+let active, snapshot, stream, presenceTimer, memoryTimer, memoryContext;
 let claudeMemReady = false;
 
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[c]));
@@ -18,18 +18,19 @@ function renderSessions() {
   for (const button of document.querySelectorAll("[data-session]")) button.onclick = () => { const next = list.find((x) => x.id === button.dataset.session); history.replaceState(null, "", `#session=${encodeURIComponent(next.id)}&token=${encodeURIComponent(next.token)}&role=${next.role}`); connect(next).catch((e) => status(e.message)); };
 }
 
-function renderFeed(activity = []) {
-  const visible = activity.slice(-4);
-  byId("feed").innerHTML = visible.map((event) => `<article class="event"><div class="avatar">${esc((event.actor || "R")[0])}</div><div class="bubble"><strong>${esc(event.actor || "Relay")}</strong><time>${new Date(event.at || event.createdAt || Date.now()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time><p>${esc(event.detail || event.type || "Workspace updated")}</p></div></article>`).join("");
-}
-
-function renderMetrics() {
-  const findings = Object.values(snapshot.greptile?.findings ?? {});
-  const latest = snapshot.greptile?.samples?.at(-1) ?? { closed: 0, remaining: findings.filter((x) => x.state === "open").length };
-  byId("closed-count").textContent = latest.closed ?? 0;
-  byId("remaining-count").textContent = latest.remaining ?? 0;
-  byId("version-count").textContent = snapshot.version ?? 0;
-  byId("greptile-pill").textContent = `Greptile · ${latest.closed ?? 0} closed`;
+function renderFeed() {
+  const exactRuns = (snapshot.agentRuns ?? []).filter((run) => run.exitCode === 0 && run.response && run.response !== "OpenCode completed with no text response.");
+  const runs = exactRuns.length ? exactRuns.slice(-2) : (snapshot.agentRuns ?? []).slice(-2);
+  if (runs.length) {
+    byId("feed").innerHTML = runs.map((run) => {
+      const inherited = run.inheritedContext ? `Inherited: ${run.inheritedContext.problem} Constraint: ${run.inheritedContext.constraint} Next: ${run.inheritedContext.nextAction}` : "This legacy run did not retain its prompt text.";
+      const response = run.response || "This legacy run completed successfully, but its exact response was not retained. New runs preserve the full wording here.";
+      return `<article class="event"><div class="avatar">${esc((run.requestedBy || "A")[0])}</div><div class="bubble"><strong>${esc(run.requestedBy || "Agent")}</strong><time>${new Date(run.completedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time><span class="inherited">${esc(inherited)}</span><div class="agent-response">${esc(response)}</div></div></article>`;
+    }).join("");
+    return;
+  }
+  const event = snapshot.activity?.at(-1);
+  byId("feed").innerHTML = event ? `<article class="event"><div class="avatar">${esc((event.actor || "R")[0])}</div><div class="bubble"><strong>${esc(event.actor || "Relay")}</strong><p>${esc(event.detail)}</p></div></article>` : "";
 }
 
 function render(next) {
@@ -37,18 +38,15 @@ function render(next) {
   byId("session-title-view").textContent = snapshot.title;
   byId("session-subtitle").textContent = `${snapshot.repository.name} · PR #${snapshot.repository.prNumber} · v${snapshot.version}`;
   byId("presence").innerHTML = snapshot.participants.map((p) => `<div class="avatar" style="background:${esc(p.color)}" title="${esc(p.name)} · ${esc(p.role)}">${esc(p.name[0])}</div>`).join("");
-  for (const area of document.querySelectorAll("[data-field]")) if (document.activeElement !== area) area.value = snapshot.brief[area.dataset.field] ?? "";
   if (document.activeElement !== byId("composer")) byId("composer").value = snapshot.brief.implementation ?? "";
   const runs = snapshot.agentRuns ?? [];
-  const boxes = [...new Set(runs.map((run) => run.sailboxId).filter(Boolean))];
-  byId("coordination-state").textContent = runs.length ? `${runs.length} OpenCode sessions · ${boxes.length || 1} Sailbox` : "One serialized agent queue";
-  byId("coordination-detail").textContent = runs.length ? "Ajinkya and Sanjana worked from the same durable state" : `${snapshot.checkpoints.length} checkpoint${snapshot.checkpoints.length === 1 ? "" : "s"} · ready on host`;
-  byId("runs").innerHTML = runs.length ? runs.map((run) => `<div class="run"><b>${esc(run.requestedBy)}</b><br>${esc(run.openCodeSessionId ?? run.id.slice(0, 8))} · ${esc(run.sailboxId ?? "local")}</div>`).join("") : '<div class="run">No agent runs yet.</div>';
-  byId("two-agents").disabled = snapshot.checkpoints.length === 0;
-  byId("agent").disabled = snapshot.checkpoints.length === 0;
+  const exactRuns = runs.filter((run) => run.exitCode === 0 && run.response && run.response !== "OpenCode completed with no text response.").slice(-2);
+  const boxes = [...new Set(exactRuns.map((run) => run.sailboxId).filter(Boolean))];
+  byId("coordination-state").textContent = exactRuns.length ? `${exactRuns.length} agent responses · ${boxes.length || 1} Sailbox` : "One serialized agent queue";
+  byId("coordination-detail").textContent = exactRuns.length ? "Latest Ajinkya + Sanjana handoff, preserved word for word" : `${snapshot.checkpoints.length} checkpoint${snapshot.checkpoints.length === 1 ? "" : "s"} · ready on host`;
   byId("host-mode").textContent = active.role === "pm" ? "Connected as Sanjana" : "Host integrations ready";
   byId("host-help").textContent = active.role === "pm" ? "No local keys required" : "Powered by host integrations";
-  renderFeed(snapshot.activity ?? []); renderMetrics(); remember();
+  renderFeed(); remember();
   clearTimeout(memoryTimer); memoryTimer = setTimeout(recallMemory, 900);
 }
 
@@ -68,7 +66,6 @@ async function updateField(field, value) {
   if (!active) return;
   render(await json(await fetch(`/v1/sessions/${active.id}/brief`, { method: "POST", headers: authHeaders({ "content-type": "application/json" }), body: JSON.stringify({ ...person(), actor: person().name, actorId: person().id, field, value }) })));
 }
-for (const area of document.querySelectorAll("[data-field]")) area.addEventListener("input", () => { clearTimeout(editTimer); editTimer = setTimeout(() => updateField(area.dataset.field, area.value).catch((e) => status(e.message)), 100); });
 byId("send").onclick = () => updateField("implementation", byId("composer").value).then(() => status("Shared with the workspace.")).catch((e) => status(e.message));
 
 async function recallMemory() {
@@ -79,20 +76,11 @@ async function recallMemory() {
     const ids = memoryContext.observationIds.filter((id) => !snapshot.claudeMem.observationIds.includes(String(id)));
     if (ids.length) await json(await fetch(`/v1/sessions/${active.id}/memory`, { method: "POST", headers: authHeaders({ "content-type": "application/json" }), body: JSON.stringify({ observationIds: ids }) }));
     byId("memory-pill").textContent = memoryContext.observationIds.length ? `Claude-Mem · ${memoryContext.observationIds.length} recalled` : "Claude-Mem · listening";
-    byId("memory-state").textContent = "Claude-Mem supplies relevant memory silently.";
   } catch { byId("memory-pill").textContent = "Claude-Mem · optional"; }
 }
 
-function openDrawer(title = "Shared brief") { byId("drawer-title").textContent = title; byId("drawer").hidden = false; }
-for (const id of ["open-runs", "memory-pill", "greptile-pill", "sail-pill"]) byId(id).onclick = () => openDrawer("Session details");
-byId("close-drawer").onclick = () => { byId("drawer").hidden = true; };
-
 byId("invite-session").onclick = async () => { if (!snapshot) return; await navigator.clipboard.writeText(snapshot.links?.pmInviteUrl ?? active.inviteUrl); status("Invite copied. Sanjana only needs the link."); };
 byId("preview-session").onclick = () => snapshot && window.open(snapshot.links?.pmInviteUrl ?? active.inviteUrl, "relay-pm-preview");
-byId("relay").onclick = async () => { byId("relay").disabled = true; status("Sealing the shared state on the host…"); try { transfer = await json(await fetch(`/v1/sessions/${active.id}/checkpoints`, { method: "POST", headers: authHeaders({ "content-type": "application/json" }), body: JSON.stringify({ actor: person().name, claudeMemObservationIds: memoryContext?.observationIds ?? [] }) })); status(`Checkpoint v${transfer.version} sealed to ${transfer.provider}.`); } catch (e) { status(e.message); } finally { byId("relay").disabled = false; } };
-byId("agent").onclick = async () => { status("Running the next action through the host queue…"); try { const result = await json(await fetch(`/v1/sessions/${active.id}/agent/run`, { method: "POST", headers: authHeaders({ "content-type": "application/json" }), body: JSON.stringify({ target: "opencode", requestedBy: person().name, demo: true }) })); status(`Agent run ${result.status}.`); } catch (e) { status(e.message); } };
-byId("two-agents").onclick = async () => { byId("two-agents").disabled = true; status("Queueing two separate OpenCode sessions on one Sailbox…"); try { const run = (requestedBy) => json(fetch(`/v1/sessions/${active.id}/agent/run`, { method: "POST", headers: authHeaders({ "content-type": "application/json" }), body: JSON.stringify({ target: "opencode", requestedBy, demo: true }) })); await Promise.all([run("Ajinkya · SWE"), run("Sanjana · PM")]); status("Two sessions completed in order on one Sailbox."); } catch (e) { status(e.message); } finally { byId("two-agents").disabled = false; } };
-byId("review").onclick = async () => { status("Checking this pull request with Greptile…"); try { const m = await json(await fetch(`/v1/sessions/${active.id}/greptile/sync`, { method: "POST", headers: authHeaders() })); status(`${m.totals.closed} findings closed · ${m.totals.remaining} remaining.`); } catch (e) { status(`Greptile unavailable: ${e.message}`); } };
 
 const dialog = byId("session-dialog");
 byId("new-session").onclick = () => dialog.showModal(); byId("close-sheet").onclick = () => dialog.close();

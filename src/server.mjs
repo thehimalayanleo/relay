@@ -416,6 +416,12 @@ export async function createRelayServer(options = {}) {
             completedAt: result.completedAt,
             exitCode: result.exitCode,
             artifact: `agents/${result.id}.json`,
+            inheritedContext: {
+              problem: session.brief.problem,
+              constraint: session.brief.constraint,
+              nextAction: session.brief.implementation,
+            },
+            response: exactAgentResponse(result.stdout),
           });
           return { status: result.exitCode === 0 ? "agent-completed" : "agent-failed", result, queueJob };
         });
@@ -881,4 +887,17 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
     console.error(error);
     process.exitCode = 1;
   });
+}
+function exactAgentResponse(stdout = "") {
+  const text = [];
+  for (const line of String(stdout).split("\n")) {
+    try {
+      const event = JSON.parse(line);
+      const candidate = event?.part?.text ?? event?.text ?? (event?.type === "text" ? event?.content : "");
+      if (typeof candidate === "string" && candidate.trim()) text.push(candidate.trim());
+    } catch {
+      if (line.trim() && !line.includes('"sessionID"')) text.push(line.trim());
+    }
+  }
+  return text.join("\n").trim().slice(0, 4000) || "OpenCode completed with no text response.";
 }
