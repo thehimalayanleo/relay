@@ -11,12 +11,13 @@ Usage:
   relay doctor [--server URL]
   relay handoff [notes.txt|-] --goal TEXT --next TEXT [--to TARGET] [--from HARNESS] [--pod] [--quiet]
   relay create <capsule.json> [--pod] [--ttl HOURS] [--quiet] [--server URL]
-  relay pull <share-url> [--target codex|claude|cursor|generic|human]
+  relay pull <share-url> [--target codex|claude|cursor|opencode|generic|human]
   relay get <share-url>
   relay pod <share-url>
-  relay agent <share-url> [--target codex|claude|cursor|generic|human]
+  relay agent <share-url> [--target codex|claude|cursor|opencode|generic|human]
+  relay agent-queue <share-url>
   relay terminate <share-url>
-  relay render <share-url> [--target codex|claude|cursor|generic|human]
+  relay render <share-url> [--target codex|claude|cursor|opencode|generic|human]
   relay accept <share-url> --actor NAME --goal TEXT --first-action TEXT [--harness NAME]
   relay cost [assumptions.json] [--server URL]
 
@@ -177,6 +178,12 @@ async function main() {
       headers: { authorization: `Bearer ${endpoint.token}`, "content-type": "application/json" },
       body: JSON.stringify({ target: option("--target", "generic") }),
     }));
+    return;
+  }
+
+  if (command === "agent-queue") {
+    const endpoint = endpointFromShareUrl(argument, "/agent/queue");
+    writeJson(await jsonRequest(endpoint.url, authorized(endpoint)));
     return;
   }
 

@@ -20,6 +20,7 @@ export function renderPrompt(record, target = "generic") {
     codex: "Open the relevant project in Codex. Verify the workspace and validation state before editing. Preserve unrelated user changes.",
     claude: "Open the relevant project in Claude Code. Inspect the cited artifacts and re-run the stated checks before editing.",
     cursor: "Open the relevant project in Cursor. Use this as task context, but confirm every cited file and validation claim before changing code.",
+    opencode: "Load this checkpoint in OpenCode. Verify the cited workspace state and checks before using the configured model or tools.",
     generic: "Load this checkpoint into the receiving agent harness. Verify external state before taking the next action.",
     human: "Review the objective, decisions, evidence, and next action. Resolve any mismatch before accepting responsibility.",
   };
@@ -97,4 +98,4 @@ ${bullets(c.stopConditions)}
 `;
 }
 
-export const SUPPORTED_TARGETS = ["generic", "codex", "claude", "cursor", "human"];
+export const SUPPORTED_TARGETS = ["generic", "codex", "claude", "cursor", "opencode", "human"];

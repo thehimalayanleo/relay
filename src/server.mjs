@@ -16,6 +16,7 @@ import { GreptileMcpClient } from "./greptile-mcp.mjs";
 import { findingFromGreptileComment, improvementLoopDecision } from "./improvement-loop.mjs";
 import { CollaborationHub } from "./collaboration.mjs";
 import { ClaudeMemClient } from "./claude-mem.mjs";
+import { AgentRunQueue } from "./agent-queue.mjs";
 
 const sourceDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.dirname(sourceDir);
@@ -133,6 +134,7 @@ export async function createRelayServer(options = {}) {
   const corsOrigin = options.corsOrigin ?? process.env.RELAY_CORS_ORIGIN ?? "*";
   const collaboration = options.collaboration ?? new CollaborationHub();
   const claudeMem = options.claudeMem ?? new ClaudeMemClient();
+  const agentQueue = options.agentQueue ?? new AgentRunQueue();
 
   return createHttpServer(async (request, response) => {
     const url = new URL(request.url, `http://${request.headers.host ?? "localhost"}`);
@@ -444,6 +446,7 @@ export async function createRelayServer(options = {}) {
           store,
           workPodProvider,
           agentRunner,
+          agentQueue,
         }, { version }));
         return;
       }
@@ -533,22 +536,36 @@ export async function createRelayServer(options = {}) {
         const prompt = body.demo === true
           ? `${rendered}\n\nStage demonstration: do not inspect files or use tools. In no more than three short sentences, state the problem, the constraint, and the next action you inherited.`
           : rendered;
-        const result = await agentRunner.run(prompt);
-        const workPod = await workPodProvider.storeAgentResult(record.workPod, result);
-        const runSummary = {
-          id: result.id,
-          harness: result.harness,
-          completedAt: result.completedAt,
-          exitCode: result.exitCode,
-          artifact: `agents/${result.id}.json`,
-        };
-        await store.update(record.id, (current) => ({
-          ...current,
-          status: result.exitCode === 0 ? "agent-completed" : "agent-failed",
-          workPod,
-          agentRuns: [...(current.agentRuns ?? []), runSummary],
-        }));
-        sendJson(response, 201, { status: result.exitCode === 0 ? "agent-completed" : "agent-failed", result, workPod });
+        const output = await agentQueue.enqueue(record.id, {
+          target,
+          requestedBy: typeof body.requestedBy === "string" ? body.requestedBy : "http-api",
+        }, async (queueJob) => {
+          const result = await agentRunner.run(prompt);
+          const workPod = await workPodProvider.storeAgentResult(record.workPod, result);
+          const runSummary = {
+            id: result.id,
+            harness: result.harness,
+            completedAt: result.completedAt,
+            exitCode: result.exitCode,
+            artifact: `agents/${result.id}.json`,
+            queueJobId: queueJob.id,
+          };
+          await store.update(record.id, (current) => ({
+            ...current,
+            status: result.exitCode === 0 ? "agent-completed" : "agent-failed",
+            workPod,
+            agentRuns: [...(current.agentRuns ?? []), runSummary],
+          }));
+          return { status: result.exitCode === 0 ? "agent-completed" : "agent-failed", result, workPod, queueJob };
+        });
+        sendJson(response, 201, { ...output, queue: agentQueue.status(record.id) });
+        return;
+      }
+
+      const agentQueueMatch = url.pathname.match(/^\/v1\/relays\/([0-9a-f-]{36})\/agent\/queue$/i);
+      if (request.method === "GET" && agentQueueMatch) {
+        assertReadable(await store.get(agentQueueMatch[1]), requestToken(request, url));
+        sendJson(response, 200, agentQueue.status(agentQueueMatch[1]));
         return;
       }
 

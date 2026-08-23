@@ -20,6 +20,7 @@ The current release is a local or trusted-network prototype. It has no user acco
 
 - Real-time shared product rooms with PM/SWE presence, synchronized briefs, and a common agent activity stream.
 - Claude-Mem adapter for retrieving cited session observations before Relay seals the transferable subset.
+- Serialized model-run queue shared by HTTP, CLI, JavaScript, OpenCode, and Google A2A entry points.
 - One-button web-app overlay with a copyable browser handoff link.
 - HTTP API that any harness can call.
 - Dependency-free JavaScript client in `src/client.mjs` for direct harness integration.
@@ -255,6 +256,7 @@ The transport schema is published at `schema/relay-v1.schema.json` so non-JavaSc
 | `GET` | `/v1/relays/:id/render?target=codex` | Produce a harness-specific resume prompt |
 | `GET` | `/v1/relays/:id/pod` | Pull the sealed work-pod context bundle |
 | `POST` | `/v1/relays/:id/agent/run` | Run the backend-configured autonomous harness |
+| `GET` | `/v1/relays/:id/agent/queue` | Inspect active, waiting, and completed serialized model runs |
 | `POST` | `/v1/relays/:id/pod/terminate` | Permanently terminate the attached work pod |
 | `POST` | `/v1/relays/:id/accept` | Record the recipient's understanding and first action |
 | `POST` | `/v1/cost-estimate` | Run the configurable unit-economics model |

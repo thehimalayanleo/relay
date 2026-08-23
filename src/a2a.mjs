@@ -157,23 +157,26 @@ async function runAgent(record, dependencies, target) {
   if (!dependencies.agentRunner.status().configured) {
     throw new A2aError(-32004, "No autonomous harness is configured.", "UNSUPPORTED_OPERATION");
   }
-  const result = await dependencies.agentRunner.run(renderPrompt(record, target));
-  const workPod = await dependencies.workPodProvider.storeAgentResult(record.workPod, result);
-  const status = result.exitCode === 0 ? "agent-completed" : "agent-failed";
-  const runSummary = {
-    id: result.id,
-    harness: result.harness,
-    completedAt: result.completedAt,
-    exitCode: result.exitCode,
-    artifact: `agents/${result.id}.json`,
-  };
-  await dependencies.store.update(record.id, (current) => ({
-    ...current,
-    status,
-    workPod,
-    agentRuns: [...(current.agentRuns ?? []), runSummary],
-  }));
-  return { action: "agent-run", status, result, workPod };
+  return dependencies.agentQueue.enqueue(record.id, { target, requestedBy: "a2a" }, async (queueJob) => {
+    const result = await dependencies.agentRunner.run(renderPrompt(record, target));
+    const workPod = await dependencies.workPodProvider.storeAgentResult(record.workPod, result);
+    const status = result.exitCode === 0 ? "agent-completed" : "agent-failed";
+    const runSummary = {
+      id: result.id,
+      harness: result.harness,
+      completedAt: result.completedAt,
+      exitCode: result.exitCode,
+      artifact: `agents/${result.id}.json`,
+      queueJobId: queueJob.id,
+    };
+    await dependencies.store.update(record.id, (current) => ({
+      ...current,
+      status,
+      workPod,
+      agentRuns: [...(current.agentRuns ?? []), runSummary],
+    }));
+    return { action: "agent-run", status, result, workPod, queueJob };
+  });
 }
 
 export function createA2aAgentCard(origin) {

@@ -54,7 +54,7 @@ export class RelayClient {
     }));
   }
 
-  async runAgent(shareUrl, target = "generic") {
+  async runAgent(shareUrl, target = "generic", requestedBy = "javascript-client") {
     const { origin, id, token } = parseShareUrl(shareUrl);
     return responseBody(await this.fetch(`${origin}/v1/relays/${id}/agent/run`, {
       method: "POST",
@@ -62,7 +62,14 @@ export class RelayClient {
         authorization: `Bearer ${token}`,
         "content-type": "application/json",
       },
-      body: JSON.stringify({ target }),
+      body: JSON.stringify({ target, requestedBy }),
+    }));
+  }
+
+  async agentQueue(shareUrl) {
+    const { origin, id, token } = parseShareUrl(shareUrl);
+    return responseBody(await this.fetch(`${origin}/v1/relays/${id}/agent/queue`, {
+      headers: { authorization: `Bearer ${token}` },
     }));
   }
 

@@ -2,6 +2,7 @@ const destinationMeta = {
   codex: { label: "Codex", glyph: "</>" },
   claude: { label: "Claude", glyph: "✦" },
   cursor: { label: "Cursor", glyph: "↖" },
+  opencode: { label: "OpenCode", glyph: "◈" },
 };
 
 export class RelayButton extends HTMLElement {
@@ -208,6 +209,7 @@ export class RelayButton extends HTMLElement {
                 <button class="destination" data-target="codex" type="button">&lt;/&gt; Codex</button>
                 <button class="destination selected" data-target="claude" type="button">✦ Claude</button>
                 <button class="destination" data-target="cursor" type="button">↖ Cursor</button>
+                <button class="destination" data-target="opencode" type="button">◈ OpenCode</button>
               </div>
             </div>
             <div class="space">

@@ -312,7 +312,7 @@ byId("agent").addEventListener("click", async () => {
     const result = await json(await fetch(`/v1/relays/${params.get("id")}/agent/run`, {
       method: "POST",
       headers: { authorization: `Bearer ${params.get("token")}`, "content-type": "application/json" },
-      body: JSON.stringify({ target: "generic", demo: true }),
+      body: JSON.stringify({ target: "opencode", requestedBy: me.name, demo: true }),
     }));
     const ok = result.result.exitCode === 0;
     await recordRoomActivity("agent", ok ? "Ox Alpha completed the inherited task" : "Ox Alpha returned a controlled stop", "Ox Alpha");
