@@ -46,7 +46,8 @@
     "cost": "node scripts/cost-model.mjs",
     "evaluate": "node scripts/evaluate.mjs examples/eval-results.example.json",
     "e2e:arc-collaboration": "node scripts/e2e-arc-swe-collaboration.mjs",
-    "e2e:arc-builder-challenger": "node scripts/e2e-arc-builder-challenger.mjs"
+    "e2e:arc-builder-challenger": "node scripts/e2e-arc-builder-challenger.mjs",
+    "run:arc-autonomous": "node scripts/run-arc-autonomous-loop.mjs"
   },
   "engines": {
     "node": ">=20"
