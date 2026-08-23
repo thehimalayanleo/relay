@@ -15,6 +15,7 @@ import { greptileHandoffCapsule } from "./greptile.mjs";
 import { GreptileMcpClient } from "./greptile-mcp.mjs";
 import { findingFromGreptileComment, improvementLoopDecision } from "./improvement-loop.mjs";
 import { CollaborationHub } from "./collaboration.mjs";
+import { ClaudeMemClient } from "./claude-mem.mjs";
 
 const sourceDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.dirname(sourceDir);
@@ -56,6 +57,7 @@ function sendError(response, error) {
     GREPTILE_UNAVAILABLE: 503,
     GREPTILE_MCP_ERROR: 502,
     GREPTILE_TOOL_ERROR: 502,
+    CLAUDE_MEM_UNAVAILABLE: 503,
   };
   sendJson(response, statusByCode[error.code] ?? 400, {
     error: error.code ?? "BAD_REQUEST",
@@ -130,6 +132,7 @@ export async function createRelayServer(options = {}) {
   const greptileClient = options.greptileClient ?? new GreptileMcpClient();
   const corsOrigin = options.corsOrigin ?? process.env.RELAY_CORS_ORIGIN ?? "*";
   const collaboration = options.collaboration ?? new CollaborationHub();
+  const claudeMem = options.claudeMem ?? new ClaudeMemClient();
 
   return createHttpServer(async (request, response) => {
     const url = new URL(request.url, `http://${request.headers.host ?? "localhost"}`);
@@ -247,6 +250,23 @@ export async function createRelayServer(options = {}) {
           server: initialized?.serverInfo ?? null,
           protocolVersion: initialized?.protocolVersion ?? null,
         });
+        return;
+      }
+
+      if (request.method === "GET" && url.pathname === "/v1/integrations/claude-mem/status") {
+        sendJson(response, 200, await claudeMem.status());
+        return;
+      }
+
+      if (request.method === "POST" && url.pathname === "/v1/integrations/claude-mem/search") {
+        const body = await readJson(request);
+        const query = typeof body.query === "string" ? body.query.trim() : "";
+        if (!query) throw new Error("query is required.");
+        sendJson(response, 200, await claudeMem.search({
+          query,
+          project: typeof body.project === "string" ? body.project.trim() : "",
+          limit: Number(body.limit ?? 8),
+        }));
         return;
       }
 

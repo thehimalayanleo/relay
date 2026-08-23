@@ -3,10 +3,15 @@ let transfer;
 let agentAvailable = false;
 let contextDrop = null;
 let currentArcRun = null;
+let claudeMemContext = null;
 byId("truth").setAttribute("aria-live", "polite");
 byId("provider").setAttribute("aria-live", "polite");
 byId("agent").title = "Seal Agent 1's checkpoint first.";
 byId("resume").title = "Seal Agent 1's checkpoint first.";
+const memoryButton = document.createElement("button");
+memoryButton.id = "memory";
+memoryButton.textContent = "Pull Claude-Mem context";
+document.querySelector(".controls").prepend(memoryButton);
 
 document.querySelector(".run-card strong").textContent = "Relay product room";
 document.querySelector(".run-card p").textContent = "Sanjana shapes the product. Ajinkya implements. The agent follows one shared brief.";
@@ -114,7 +119,10 @@ async function health() {
     byId("agent").disabled = !agentAvailable;
     const live = await json(await fetch("/v1/integrations/greptile/status"));
     byId("greptile-state").textContent = live.liveApiConnected ? "Greptile: connected" : "Greptile: offline";
-    byId("truth").textContent = `Relay: live · Ox Alpha: ${agentAvailable ? "ready" : "offline"} · Workspace: ${sail ? "Sail" : "local"} · Greptile: ${live.liveApiConnected ? "connected" : "offline"}`;
+    const memory = await json(await fetch("/v1/integrations/claude-mem/status"));
+    memoryButton.textContent = memory.connected ? `Claude-Mem ${memory.version} · pull context` : "Claude-Mem offline";
+    memoryButton.disabled = !memory.connected;
+    byId("truth").textContent = `Relay: live · Claude-Mem: ${memory.connected ? "ready" : "offline"} · Workspace: ${sail ? "Sail" : "local"} · Greptile: ${live.liveApiConnected ? "connected" : "offline"}`;
   } catch (error) {
     byId("provider").textContent = "Offline";
     byId("truth").textContent = error.message;
@@ -243,8 +251,15 @@ byId("relay").addEventListener("click", async () => {
       },
       acceptanceCriteria: [roomSnapshot?.brief.acceptance ?? scenario.acceptanceCriteria[0]],
     };
+    const transferableContext = [contextDrop?.content, claudeMemContext?.text].filter(Boolean).join("\n\n");
+    const combinedDrop = transferableContext ? {
+      name: "relay-context.md",
+      mediaType: "text/markdown",
+      content: transferableContext,
+      claudeMemObservationIds: claudeMemContext?.observationIds ?? [],
+    } : null;
     transfer = await json(await fetch("/v1/integrations/greptile/handoffs", {
-      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...liveScenario, contextDrop }),
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...liveScenario, contextDrop: combinedDrop }),
     }));
     await recordRoomActivity("checkpoint", `sealed shared brief v${roomSnapshot?.version ?? 0}`, me.name);
     byId("resume").disabled = false;
@@ -260,6 +275,30 @@ byId("relay").addEventListener("click", async () => {
   } catch (error) {
     byId("truth").textContent = error.message;
     byId("relay").disabled = false;
+  }
+});
+
+memoryButton.addEventListener("click", async () => {
+  memoryButton.disabled = true;
+  memoryButton.textContent = "Searching Claude-Mem…";
+  try {
+    const query = [roomSnapshot?.brief.problem, roomSnapshot?.brief.implementation].filter(Boolean).join(" ");
+    claudeMemContext = await json(await fetch("/v1/integrations/claude-mem/search", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ query, project: "relay", limit: 8 }),
+    }));
+    const count = claudeMemContext.observationIds.length;
+    memoryButton.textContent = count ? `${count} Claude-Mem observations attached` : "Claude-Mem ready · no prior Relay memory";
+    byId("truth").textContent = count
+      ? `Claude-Mem supplied ${count} cited observations. Relay will seal and transfer them.`
+      : "Claude-Mem is connected. This new Relay project has no indexed observations yet.";
+    await recordRoomActivity("memory", count ? `attached ${count} Claude-Mem observations` : "checked Claude-Mem; no prior Relay observations", "Claude-Mem");
+  } catch (error) {
+    memoryButton.textContent = "Claude-Mem unavailable · retry";
+    byId("truth").textContent = error.message;
+  } finally {
+    memoryButton.disabled = false;
   }
 });
 

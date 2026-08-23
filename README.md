@@ -19,6 +19,7 @@ The current release is a local or trusted-network prototype. It has no user acco
 ## What works
 
 - Real-time shared product rooms with PM/SWE presence, synchronized briefs, and a common agent activity stream.
+- Claude-Mem adapter for retrieving cited session observations before Relay seals the transferable subset.
 - One-button web-app overlay with a copyable browser handoff link.
 - HTTP API that any harness can call.
 - Dependency-free JavaScript client in `src/client.mjs` for direct harness integration.
@@ -82,6 +83,17 @@ Greptile review -> Relay handoff -> human or agent patch -> Greptile re-review
 ```
 
 It stops when no unresolved Greptile comments remain or after a frozen maximum of five iterations. `triggerReview: true` explicitly asks Greptile to review; omitting it performs a read-only check and creates a verified Relay handoff only when action is required. Relay records the iteration budget and stop condition inside the handoff so an autonomous harness cannot recurse silently.
+
+### Claude-Mem bridge
+
+Claude-Mem captures and retrieves memory inside the active coding session. Relay queries its local worker, preserves observation IDs as provenance, and transfers only the selected context across collaborators and harnesses.
+
+```text
+GET  /v1/integrations/claude-mem/status
+POST /v1/integrations/claude-mem/search
+```
+
+The integration uses the existing Claude-Mem worker and Claude Code OAuth session. Relay never receives the OAuth token. A successful connection with zero observations is shown honestly as an empty project memory, not as imported context.
 
 See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the stack, integration boundary, and Sailbox path.
 
