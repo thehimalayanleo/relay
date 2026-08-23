@@ -1,7 +1,7 @@
 const params = new URLSearchParams(location.hash.replace(/^#/, ""));
 const id = params.get("id");
 const token = params.get("token");
-const api = `/v1/passons/${encodeURIComponent(id || "")}`;
+const api = `/v1/relays/${encodeURIComponent(id || "")}`;
 let record;
 
 const byId = (value) => document.getElementById(value);
@@ -70,7 +70,7 @@ byId("terminate-pod").addEventListener("click", async () => {
   byId("pull-pod").disabled = true;
   byId("run-agent").disabled = true;
   byId("terminate-pod").disabled = true;
-  byId("notice").textContent = "The work pod has been terminated. The sealed PassOn record remains until expiry.";
+  byId("notice").textContent = "The work pod has been terminated. The sealed Relay record remains until expiry.";
 });
 
 byId("copy-prompt").addEventListener("click", async () => {
@@ -100,7 +100,7 @@ byId("accept").addEventListener("click", async () => {
 });
 
 load().catch((error) => {
-  byId("title").textContent = "Cannot open this pass-on";
+  byId("title").textContent = "Cannot open this relay";
   byId("status").textContent = "invalid";
   byId("notice").textContent = error.message;
 });

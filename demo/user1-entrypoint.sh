@@ -1,9 +1,9 @@
 #!/bin/sh
 set -eu
 
-server="${PASS_ON_SERVER:-http://host.docker.internal:4317}"
-receiver_origin="${PASS_ON_RECEIVER_ORIGIN:-http://127.0.0.1:4317}"
-output_dir="${PASS_ON_DEMO_OUT:-/demo/out}"
+server="${RELAY_SERVER:-http://host.docker.internal:4317}"
+receiver_origin="${RELAY_RECEIVER_ORIGIN:-http://127.0.0.1:4317}"
+output_dir="${RELAY_DEMO_OUT:-/demo/out}"
 
 mkdir -p "$output_dir"
 
@@ -14,7 +14,7 @@ printf 'Agent:  simulated-puzzle-observer\n'
 printf 'Goal:   transfer observed mechanics without claiming a solution\n'
 printf 'Core:   %s\n\n' "$server"
 
-health_json="$(node ./bin/passon.mjs doctor --server "$server")"
+health_json="$(node ./bin/relay.mjs doctor --server "$server")"
 provider="$(node -e 'const x=JSON.parse(process.argv[1]); process.stdout.write(x.workPod?.provider ?? "unknown")' "$health_json")"
 if [ "$provider" != "sail" ]; then
   printf 'ERROR   Expected Sail provider, found %s\n' "$provider" >&2
@@ -22,7 +22,7 @@ if [ "$provider" != "sail" ]; then
 fi
 printf 'VERIFIED  Relay Core reports provider=sail\n'
 
-transfer_json="$(node ./bin/passon.mjs create ./demo/arc-agi-3-scenario.json \
+transfer_json="$(node ./bin/relay.mjs create ./demo/arc-agi-3-scenario.json \
   --server "$server" \
   --pod \
   --ttl 1)"

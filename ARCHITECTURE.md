@@ -1,8 +1,8 @@
-# PassOn architecture
+# Relay architecture
 
 ## Product boundary
 
-PassOn is the transfer layer between a human-agent loop and its next operator. It is not a new coding harness, a shared chat room, or a replacement for source control.
+Relay is the transfer layer between a human-agent loop and its next operator. It is not a new coding harness, a shared chat room, or a replacement for source control.
 
 The transferable unit has two parts:
 
@@ -16,7 +16,7 @@ Developer 1 + agent
         |
         | one-button checkpoint
         v
-PassOn capsule + work pod
+Relay capsule + work pod
         |
         | capability link
         v
@@ -29,7 +29,7 @@ Developer 2 or standalone agent
 | --- | --- | --- |
 | Embedded UI | Standards-based Web Component, Shadow DOM, HTML, CSS, vanilla JavaScript | One script tag works across React, Vue, static apps, and agent harnesses without inheriting host styles. |
 | API | Node.js 20+, native HTTP, ECMAScript modules | Small deployment surface and a portable harness API. |
-| Protocol | `passon/v1` canonical JSON capsule with a SHA-256 digest | Portable, deterministic, and independently verifiable. |
+| Protocol | `relay/v1` canonical JSON capsule with a SHA-256 digest | Portable, deterministic, and independently verifiable. |
 | Work pod | Local filesystem or private Sailbox via `@sailresearch/sdk` | Gives people and agents both machine-readable state and a persistent remote CPU. |
 | Access | Random 256-bit capability link, fragment-carried token, hashed token at rest, expiry | Keeps the prototype account-free while avoiding public identifiers and server logs containing raw tokens. |
 | Storage | Local JSON and filesystem provider | Makes the lifecycle inspectable. This is replaceable, not the production storage recommendation. |
@@ -42,16 +42,16 @@ Developer 2 or standalone agent
 The host application supplies its current checkpoint as JSON and mounts one custom element:
 
 ```html
-<script type="module" src="https://passon.example/passon-button.js"></script>
+<script type="module" src="https://relay.example/relay-button.js"></script>
 <script id="current-checkpoint" type="application/json">{"title":"..."}</script>
-<passon-button endpoint="https://passon.example" source="#current-checkpoint"></passon-button>
+<relay-button endpoint="https://relay.example" source="#current-checkpoint"></relay-button>
 ```
 
 The component remains a 54-pixel port until selected. It then shows the transfer route, lets the operator choose the receiving harness, seals the capsule, creates the optional work pod, and copies one capability link.
 
 ## Sailbox lifecycle
 
-The provider interface in `src/workpods.mjs` separates PassOn from the compute vendor. The Sail-backed provider:
+The provider interface in `src/workpods.mjs` separates Relay from the compute vendor. The Sail-backed provider:
 
 1. Creates a private Sailbox on the backend.
 2. Write the CAMP bundle and approved workspace artifacts into the VM.
@@ -59,7 +59,7 @@ The provider interface in `src/workpods.mjs` separates PassOn from the compute v
 4. Resume it only after the recipient presents the capability and passes team authorization.
 5. Terminates it when the capability holder requests cleanup.
 
-Sail credentials stay on the backend. Only Sailbox identifiers, lifecycle state, and file paths enter PassOn records.
+Sail credentials stay on the backend. Only Sailbox identifiers, lifecycle state, and file paths enter Relay records.
 
 ## No-human loop
 

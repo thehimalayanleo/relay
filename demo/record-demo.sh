@@ -5,7 +5,7 @@ script_dir="${0:A:h}"
 repo_root="${script_dir:h}"
 output_dir="$script_dir/out"
 duration="${1:-90}"
-server="${PASS_ON_SERVER:-http://127.0.0.1:4317}"
+server="${RELAY_SERVER:-http://127.0.0.1:4317}"
 movie="$output_dir/relay-user1-sailbox-user2.mov"
 video="$output_dir/relay-user1-sailbox-user2.mp4"
 
@@ -24,13 +24,13 @@ done
 health="$(node -e '
   const base = process.argv[1].replace(/\/$/, "");
   const response = await fetch(`${base}/health`);
-  if (!response.ok) throw new Error(`PassOn Core returned HTTP ${response.status}`);
+  if (!response.ok) throw new Error(`Relay Core returned HTTP ${response.status}`);
   process.stdout.write(JSON.stringify(await response.json()));
 ' "$server")"
 
 node -e '
   const health = JSON.parse(process.argv[1]);
-  if (!health.ok) throw new Error("PassOn Core is not ready");
+  if (!health.ok) throw new Error("Relay Core is not ready");
   if (health.workPod?.provider !== "sail") {
     throw new Error(`This live demo requires the Sail provider; found ${health.workPod?.provider ?? "none"}`);
   }
@@ -39,10 +39,10 @@ node -e '
 
 mkdir -p "$output_dir"
 if [[ -f "$movie" ]]; then
-  mv "$movie" "$output_dir/passon-demo-previous-$(date +%Y%m%d-%H%M%S).mov"
+  mv "$movie" "$output_dir/relay-demo-previous-$(date +%Y%m%d-%H%M%S).mov"
 fi
 if [[ -f "$video" ]]; then
-  mv "$video" "$output_dir/passon-demo-previous-$(date +%Y%m%d-%H%M%S).mp4"
+  mv "$video" "$output_dir/relay-demo-previous-$(date +%Y%m%d-%H%M%S).mp4"
 fi
 rm -f "$output_dir/share-url.txt" "$output_dir/user1-completed-at.txt"
 

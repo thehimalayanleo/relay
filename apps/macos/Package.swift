@@ -2,14 +2,14 @@
 import PackageDescription
 
 let package = Package(
-    name: "PassOnDock",
+    name: "RelayDock",
     platforms: [.macOS(.v14)],
     products: [
-        .executable(name: "PassOnDock", targets: ["PassOnDock"]),
+        .executable(name: "RelayDock", targets: ["RelayDock"]),
     ],
     targets: [
-        .executableTarget(name: "PassOnDock"),
-        .testTarget(name: "PassOnDockTests", dependencies: ["PassOnDock"]),
+        .executableTarget(name: "RelayDock"),
+        .testTarget(name: "RelayDockTests", dependencies: ["RelayDock"]),
     ],
     swiftLanguageModes: [.v5]
 )

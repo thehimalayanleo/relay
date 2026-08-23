@@ -55,7 +55,7 @@ struct CAMPMetadata: Codable, Equatable {
     }
 }
 
-struct PassOnCapsule: Codable, Equatable {
+struct RelayCapsule: Codable, Equatable {
     var title: String
     var goal: String
     var acceptanceCriteria: [String]
@@ -75,11 +75,11 @@ struct PassOnCapsule: Codable, Equatable {
     var createdAt: Date
     var camp: CAMPMetadata?
 
-    static func fromClipboard(_ text: String, sourceApp: String, destination: Destination) -> PassOnCapsule {
+    static func fromClipboard(_ text: String, sourceApp: String, destination: Destination) -> RelayCapsule {
         let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let firstLine = cleaned.split(separator: "\n", maxSplits: 1).first.map(String.init) ?? "Borrowed context"
         let shortTitle = String(firstLine.prefix(72))
-        return PassOnCapsule(
+        return RelayCapsule(
             title: shortTitle.isEmpty ? "Borrowed context" : shortTitle,
             goal: "Continue using the supplied context without silently inventing missing state.",
             acceptanceCriteria: ["Restate the borrowed context and intended next action before proceeding"],
@@ -114,7 +114,7 @@ struct PassOnCapsule: Codable, Equatable {
 }
 
 enum CapsuleRenderer {
-    static func render(_ capsule: PassOnCapsule, for destination: Destination) -> String {
+    static func render(_ capsule: RelayCapsule, for destination: Destination) -> String {
         let destinationInstruction: String
         switch destination {
         case .codex:
@@ -203,7 +203,7 @@ struct ServiceCapsule: Codable {
     let source: CapsuleSource
     let intendedRecipient: String
 
-    init(_ capsule: PassOnCapsule) {
+    init(_ capsule: RelayCapsule) {
         title = capsule.title
         goal = capsule.goal
         acceptanceCriteria = capsule.acceptanceCriteria

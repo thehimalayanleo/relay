@@ -13,7 +13,7 @@ const capsule = {
 function fakeSailSdk() {
   const files = new Map();
   const client = { kind: "fake-client" };
-  const app = { id: "app_test", name: "passon-test" };
+  const app = { id: "app_test", name: "relay-test" };
   const box = {
     sailboxId: "sb_test",
     status: "running",
@@ -36,7 +36,7 @@ function fakeSailSdk() {
       Client: { fromEnv: () => client },
       App: {
         find: async (name, options) => {
-          assert.equal(name, "passon-test");
+          assert.equal(name, "relay-test");
           assert.equal(options.client, client);
           return app;
         },
@@ -60,7 +60,7 @@ function fakeSailSdk() {
 test("Sail provider writes, pauses, resumes, records agent output, and terminates", async () => {
   const fake = fakeSailSdk();
   const provider = new SailWorkPodProvider({
-    appName: "passon-test",
+    appName: "relay-test",
     client: fake.client,
     sdkLoader: async () => fake.sdk,
   });

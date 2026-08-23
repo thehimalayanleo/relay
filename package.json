@@ -23,12 +23,11 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/thehimalayanleo/passon-context-port.git"
+    "url": "git+https://github.com/thehimalayanleo/relay.git"
   },
   "bin": {
-    "relay": "./bin/passon.mjs",
-    "passon": "./bin/passon.mjs",
-    "passon-core": "./bin/passon-core.mjs"
+    "relay": "./bin/relay.mjs",
+    "relay-core": "./bin/relay-core.mjs"
   },
   "exports": {
     ".": "./src/client.mjs",
@@ -36,7 +35,7 @@
   },
   "scripts": {
     "start": "node src/server.mjs",
-    "start:sail": "PASS_ON_WORK_POD_PROVIDER=sail node src/server.mjs",
+    "start:sail": "RELAY_WORK_POD_PROVIDER=sail node src/server.mjs",
     "test": "node --test",
     "test:macos": "cd apps/macos && swift test",
     "package:cli": "scripts/build_cli.sh",

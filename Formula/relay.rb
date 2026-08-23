@@ -1,7 +1,7 @@
 class Relay < Formula
   desc "Carry active work between people and AI agents"
-  homepage "https://github.com/thehimalayanleo/passon-context-port"
-  url "https://github.com/thehimalayanleo/passon-context-port.git",
+  homepage "https://github.com/thehimalayanleo/relay"
+  url "https://github.com/thehimalayanleo/relay.git",
       tag: "v0.1.0"
 
   depends_on "node"
@@ -12,22 +12,22 @@ class Relay < Formula
   end
 
   service do
-    run [opt_bin/"passon", "serve"]
+    run [opt_bin/"relay", "serve"]
     keep_alive true
-    working_dir var/"passon"
-    log_path var/"log/passon.log"
-    error_log_path var/"log/passon.log"
-    environment_variables PASS_ON_DATA_DIR: var/"passon/data",
-                          PASS_ON_POD_DIR: var/"passon/pods"
+    working_dir var/"relay"
+    log_path var/"log/relay.log"
+    error_log_path var/"log/relay.log"
+    environment_variables RELAY_DATA_DIR: var/"relay/data",
+                          RELAY_POD_DIR: var/"relay/pods"
   end
 
   def caveats
     <<~EOS
       Relay starts with the local workspace provider when run as a Homebrew service.
 
-      For Sail, stop the service and run PassOn with backend-only credentials:
+      For Sail, stop the service and run Relay with backend-only credentials:
         brew services stop relay
-        PASS_ON_WORK_POD_PROVIDER=sail SAIL_API_KEY="..." relay serve
+        RELAY_WORK_POD_PROVIDER=sail SAIL_API_KEY="..." relay serve
 
       Never put SAIL_API_KEY in a handoff, URL, browser field, or capsule.
     EOS

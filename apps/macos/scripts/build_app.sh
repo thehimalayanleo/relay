@@ -16,7 +16,7 @@ swift build --disable-sandbox -c release
 
 rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS"
-cp .build/release/PassOnDock "$APP_DIR/Contents/MacOS/Relay"
+cp .build/release/RelayDock "$APP_DIR/Contents/MacOS/Relay"
 cp Info.plist "$APP_DIR/Contents/Info.plist"
 chmod +x "$APP_DIR/Contents/MacOS/Relay"
 

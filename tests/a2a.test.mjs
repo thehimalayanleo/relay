@@ -4,7 +4,7 @@ import { mkdtemp } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { createPassOnServer } from "../src/server.mjs";
+import { createRelayServer } from "../src/server.mjs";
 
 const capsule = {
   title: "A2A continuation",
@@ -15,8 +15,8 @@ const capsule = {
 };
 
 async function withServer(fn, options = {}) {
-  const dataDir = await mkdtemp(path.join(os.tmpdir(), "passon-a2a-test-"));
-  const server = await createPassOnServer({
+  const dataDir = await mkdtemp(path.join(os.tmpdir(), "relay-a2a-test-"));
+  const server = await createRelayServer({
     dataDir,
     podDir: path.join(dataDir, "pods"),
     workPodMode: "local",
@@ -31,7 +31,7 @@ async function withServer(fn, options = {}) {
 }
 
 async function createHandoff(origin) {
-  const response = await fetch(`${origin}/v1/passons`, {
+  const response = await fetch(`${origin}/v1/relays`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ capsule, workPod: { requested: true } }),
@@ -40,7 +40,7 @@ async function createHandoff(origin) {
   return response.json();
 }
 
-function rpcBody(shareUrl, passon = {}) {
+function rpcBody(shareUrl, relay = {}) {
   return {
     jsonrpc: "2.0",
     id: "request-1",
@@ -49,8 +49,8 @@ function rpcBody(shareUrl, passon = {}) {
       message: {
         messageId: randomUUID(),
         role: "ROLE_USER",
-        parts: passon.action
-          ? [{ data: { passon: { shareUrl, ...passon } }, mediaType: "application/json" }]
+        parts: relay.action
+          ? [{ data: { relay: { shareUrl, ...relay } }, mediaType: "application/json" }]
           : [{ text: `Please continue from ${shareUrl}`, mediaType: "text/plain" }],
       },
     },
@@ -86,7 +86,7 @@ test("publishes an honest A2A v1 Agent Card", async () => {
   });
 });
 
-test("SendMessage pulls a PassOn capability into a direct A2A message", async () => {
+test("SendMessage pulls a Relay capability into a direct A2A message", async () => {
   await withServer(async (origin) => {
     const created = await createHandoff(origin);
     const response = await callA2a(origin, rpcBody(created.shareUrl));
@@ -147,7 +147,7 @@ test("A2A errors use standard JSON-RPC codes and do not reveal capability validi
     const denied = await callA2a(origin, rpcBody(invalid.toString()));
     const deniedRpc = await denied.json();
     assert.equal(deniedRpc.error.code, -32001);
-    assert.equal(deniedRpc.error.message, "PassOn handoff is unavailable.");
+    assert.equal(deniedRpc.error.message, "Relay handoff is unavailable.");
 
     const badMethod = await callA2a(origin, { ...rpcBody(created.shareUrl), method: "message/send" });
     assert.equal((await badMethod.json()).error.code, -32601);

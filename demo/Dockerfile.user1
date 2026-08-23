@@ -1,15 +1,15 @@
 FROM node:22-alpine
 
-WORKDIR /opt/passon
+WORKDIR /opt/relay
 
-COPY bin/passon.mjs ./bin/passon.mjs
+COPY bin/relay.mjs ./bin/relay.mjs
 COPY demo/user1-entrypoint.sh ./demo/user1-entrypoint.sh
 COPY demo/arc-agi-3-scenario.json ./demo/arc-agi-3-scenario.json
 
-RUN chmod +x ./bin/passon.mjs ./demo/user1-entrypoint.sh
+RUN chmod +x ./bin/relay.mjs ./demo/user1-entrypoint.sh
 
-ENV PASS_ON_SERVER=http://host.docker.internal:4317 \
-    PASS_ON_RECEIVER_ORIGIN=http://127.0.0.1:4317 \
-    PASS_ON_DEMO_OUT=/demo/out
+ENV RELAY_SERVER=http://host.docker.internal:4317 \
+    RELAY_RECEIVER_ORIGIN=http://127.0.0.1:4317 \
+    RELAY_DEMO_OUT=/demo/out
 
 ENTRYPOINT ["./demo/user1-entrypoint.sh"]

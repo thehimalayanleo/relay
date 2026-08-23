@@ -1,4 +1,4 @@
-name: passon-two-user-demo
+name: relay-two-user-demo
 
 services:
   user1:
@@ -6,12 +6,12 @@ services:
       context: ..
       dockerfile: demo/Dockerfile.user1
     environment:
-      PASS_ON_SERVER: ${PASS_ON_SERVER:-http://host.docker.internal:4317}
-      PASS_ON_RECEIVER_ORIGIN: ${PASS_ON_RECEIVER_ORIGIN:-http://127.0.0.1:4317}
-      PASS_ON_DEMO_OUT: /demo/out
+      RELAY_SERVER: ${RELAY_SERVER:-http://host.docker.internal:4317}
+      RELAY_RECEIVER_ORIGIN: ${RELAY_RECEIVER_ORIGIN:-http://127.0.0.1:4317}
+      RELAY_DEMO_OUT: /demo/out
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
       - ./out:/demo/out
     labels:
-      passon.demo.role: user-1-docker
+      relay.demo.role: user-1-docker

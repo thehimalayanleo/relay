@@ -4,7 +4,7 @@ const destinationMeta = {
   cursor: { label: "Cursor", glyph: "↖" },
 };
 
-export class PassOnButton extends HTMLElement {
+export class RelayButton extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
@@ -98,7 +98,7 @@ export class PassOnButton extends HTMLElement {
       const capsule = this.capsule();
       capsule.intendedRecipient = destinationMeta[this.target].label;
       const endpoint = this.getAttribute("endpoint") || window.location.origin;
-      const response = await fetch(`${endpoint}/v1/passons`, {
+      const response = await fetch(`${endpoint}/v1/relays`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ capsule, ttlHours: 72, workPod: { requested: true } }),
@@ -114,7 +114,7 @@ export class PassOnButton extends HTMLElement {
       this.shadowRoot.querySelector(".result").classList.add("visible");
       await this.copyLink();
       status.textContent = "Handoff link copied. The recipient opens it in any browser.";
-      this.dispatchEvent(new CustomEvent("passon-created", { detail: result }));
+      this.dispatchEvent(new CustomEvent("relay-created", { detail: result }));
     } catch (error) {
       status.textContent = error.message;
       this.emitError(error.message);
@@ -132,54 +132,54 @@ export class PassOnButton extends HTMLElement {
   }
 
   emitError(message) {
-    this.dispatchEvent(new CustomEvent("passon-error", { detail: { message } }));
+    this.dispatchEvent(new CustomEvent("relay-error", { detail: { message } }));
   }
 
   render() {
     this.shadowRoot.innerHTML = `
       <style>
-        :host { all: initial; --passon-orange: #ff5a1f; --passon-orange-rgb: 255,90,31; font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+        :host { all: initial; --relay-orange: #ff5a1f; --relay-orange-rgb: 255,90,31; font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
         * { box-sizing: border-box; }
         button { font: inherit; }
-        .port { position: fixed; right: 24px; bottom: 24px; z-index: 2147483000; width: 52px; height: 52px; padding: 0; border: 1px solid rgba(255,255,255,.28); border-radius: 50%; color: white; background: var(--passon-orange); box-shadow: 0 14px 32px rgba(var(--passon-orange-rgb),.30); cursor: pointer; transition: transform .18s ease, box-shadow .18s ease; }
-        .port:hover { transform: translateY(-2px) scale(1.03); box-shadow: 0 18px 38px rgba(var(--passon-orange-rgb),.38); }
+        .port { position: fixed; right: 24px; bottom: 24px; z-index: 2147483000; width: 52px; height: 52px; padding: 0; border: 1px solid rgba(255,255,255,.28); border-radius: 50%; color: white; background: var(--relay-orange); box-shadow: 0 14px 32px rgba(var(--relay-orange-rgb),.30); cursor: pointer; transition: transform .18s ease, box-shadow .18s ease; }
+        .port:hover { transform: translateY(-2px) scale(1.03); box-shadow: 0 18px 38px rgba(var(--relay-orange-rgb),.38); }
         .port-glyph { display: grid; place-items: center; font-size: 21px; font-weight: 800; }
         .backdrop { position: fixed; inset: 0; z-index: 2147482999; display: flex; justify-content: flex-end; align-items: flex-end; padding: 90px 24px; background: rgba(19,21,23,.22); backdrop-filter: blur(2px) saturate(.85); opacity: 0; pointer-events: none; transition: opacity .18s ease; }
         .backdrop.visible { opacity: 1; pointer-events: auto; }
         .panel { width: min(408px, calc(100vw - 28px)); color: #181a18; background: rgba(250,249,245,.97); border: 1px solid rgba(24,26,24,.13); border-radius: 22px; box-shadow: 0 28px 80px rgba(0,0,0,.26); overflow: hidden; transform: translateY(10px) scale(.98); transition: transform .2s ease; outline: none; }
         .visible .panel { transform: translateY(0) scale(1); }
         .head { display: flex; align-items: center; gap: 10px; padding: 14px 15px; border-bottom: 1px solid rgba(24,26,24,.1); }
-        .mark { display: grid; place-items: center; width: 30px; height: 30px; color: white; background: var(--passon-orange); border-radius: 9px; font-weight: 850; }
+        .mark { display: grid; place-items: center; width: 30px; height: 30px; color: white; background: var(--relay-orange); border-radius: 9px; font-weight: 850; }
         .brand { display: grid; gap: 1px; }
         .brand strong { font-size: 11px; letter-spacing: .14em; }
         .brand span { color: #6b6e67; font-size: 10px; }
-        .mode { margin-left: auto; color: var(--passon-orange); font: 700 9px ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .08em; }
+        .mode { margin-left: auto; color: var(--relay-orange); font: 700 9px ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .08em; }
         .close { width: 26px; height: 26px; padding: 0; color: #555a53; border: 0; border-radius: 50%; background: rgba(0,0,0,.055); cursor: pointer; }
         .body { display: grid; gap: 13px; padding: 15px; }
         .label { margin: 0 0 7px; color: #73776f; font-size: 9px; font-weight: 800; letter-spacing: .12em; }
         .destinations { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
         .destination { display: flex; justify-content: center; align-items: center; gap: 6px; min-height: 36px; color: #242624; border: 1px solid rgba(24,26,24,.1); border-radius: 10px; background: rgba(255,255,255,.55); font-size: 11px; font-weight: 700; cursor: pointer; }
-        .destination.selected { color: white; background: var(--passon-orange); border-color: var(--passon-orange); }
-        .space { padding: 11px; border: 1px solid rgba(var(--passon-orange-rgb),.20); border-radius: 13px; background: rgba(var(--passon-orange-rgb),.06); }
+        .destination.selected { color: white; background: var(--relay-orange); border-color: var(--relay-orange); }
+        .space { padding: 11px; border: 1px solid rgba(var(--relay-orange-rgb),.20); border-radius: 13px; background: rgba(var(--relay-orange-rgb),.06); }
         .space-head, .receipt { display: flex; align-items: center; }
         .space-head { margin-bottom: 8px; }
         .space-head .label { margin: 0; }
-        .space-tag { margin-left: auto; color: var(--passon-orange); font: 750 8px ui-monospace, SFMono-Regular, Menlo, monospace; }
+        .space-tag { margin-left: auto; color: var(--relay-orange); font: 750 8px ui-monospace, SFMono-Regular, Menlo, monospace; }
         .route { display: grid; grid-template-columns: 62px 1fr 62px 1fr 62px; align-items: center; gap: 3px; }
         .node { display: grid; justify-items: center; gap: 4px; min-width: 0; }
         .node-icon { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; background: rgba(0,0,0,.07); font-size: 10px; font-weight: 850; }
-        .pod-icon { color: var(--passon-orange); background: rgba(var(--passon-orange-rgb),.13); }
-        .pod-icon.ready { color: white; background: var(--passon-orange); }
+        .pod-icon { color: var(--relay-orange); background: rgba(var(--relay-orange-rgb),.13); }
+        .pod-icon.ready { color: white; background: var(--relay-orange); }
         .node-name { width: 100%; overflow: hidden; text-align: center; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; font-weight: 700; }
         .lineage { display: flex; align-items: center; }
-        .lineage i { flex: 1; height: 1px; background: rgba(var(--passon-orange-rgb),.42); }
-        .lineage b { display: grid; place-items: center; width: 22px; height: 22px; color: var(--passon-orange); border-radius: 50%; background: rgba(var(--passon-orange-rgb),.13); font-size: 11px; }
+        .lineage i { flex: 1; height: 1px; background: rgba(var(--relay-orange-rgb),.42); }
+        .lineage b { display: grid; place-items: center; width: 22px; height: 22px; color: var(--relay-orange); border-radius: 50%; background: rgba(var(--relay-orange-rgb),.13); font-size: 11px; }
         .context { padding: 11px; border: 1px solid rgba(24,26,24,.1); border-radius: 13px; background: rgba(255,255,255,.58); }
         .context-top { display: flex; justify-content: space-between; gap: 10px; }
         .context-size { color: #7d8179; font: 9px ui-monospace, SFMono-Regular, Menlo, monospace; }
         .objective { margin: 0 0 6px; font-size: 12px; font-weight: 750; line-height: 1.35; }
         .preview { display: -webkit-box; overflow: hidden; margin: 0; color: #5f635c; font: 10px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
-        .primary { width: 100%; min-height: 44px; padding: 0 13px; color: white; border: 0; border-radius: 12px; background: var(--passon-orange); font-size: 12px; font-weight: 800; cursor: pointer; }
+        .primary { width: 100%; min-height: 44px; padding: 0 13px; color: white; border: 0; border-radius: 12px; background: var(--relay-orange); font-size: 12px; font-weight: 800; cursor: pointer; }
         .primary:disabled { opacity: .6; cursor: wait; }
         .receipt { gap: 7px; min-height: 17px; }
         .state-dot { width: 6px; height: 6px; border-radius: 50%; background: #e39c35; }
@@ -235,4 +235,4 @@ export class PassOnButton extends HTMLElement {
   }
 }
 
-customElements.define("passon-button", PassOnButton);
+customElements.define("relay-button", RelayButton);

@@ -1,9 +1,9 @@
 import XCTest
-@testable import PassOnDock
+@testable import RelayDock
 
 final class CapsuleTests: XCTestCase {
     func testClipboardCapsulePreservesSourceAndDestination() throws {
-        let capsule = PassOnCapsule.fromClipboard(
+        let capsule = RelayCapsule.fromClipboard(
             "Parser work is partial. Keep the public API stable.",
             sourceApp: "Codex",
             destination: .claude
@@ -15,7 +15,7 @@ final class CapsuleTests: XCTestCase {
     }
 
     func testClaudeRendererAddsVerificationBoundary() throws {
-        let capsule = PassOnCapsule.fromClipboard(
+        let capsule = RelayCapsule.fromClipboard(
             "Three targeted tests passed. Full suite not run.",
             sourceApp: "Cursor",
             destination: .claude
@@ -28,7 +28,7 @@ final class CapsuleTests: XCTestCase {
     }
 
     func testPortableCapsuleRoundTrips() throws {
-        let capsule = PassOnCapsule.fromClipboard(
+        let capsule = RelayCapsule.fromClipboard(
             "Portable context",
             sourceApp: "Notes",
             destination: .cursor
@@ -38,7 +38,7 @@ final class CapsuleTests: XCTestCase {
         let data = try encoder.encode(capsule)
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        let decoded = try decoder.decode(PassOnCapsule.self, from: data)
+        let decoded = try decoder.decode(RelayCapsule.self, from: data)
         XCTAssertEqual(decoded.title, capsule.title)
         XCTAssertEqual(decoded.traceSummary, capsule.traceSummary)
         XCTAssertEqual(decoded.source, capsule.source)
@@ -48,7 +48,7 @@ final class CapsuleTests: XCTestCase {
     }
 
     func testCapsuleCarriesCAMPEnvelope() throws {
-        let capsule = PassOnCapsule.fromClipboard(
+        let capsule = RelayCapsule.fromClipboard(
             "Resume parser validation",
             sourceApp: "Codex",
             destination: .cursor

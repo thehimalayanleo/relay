@@ -82,7 +82,7 @@ export class LocalWorkPodProvider {
 export class SailWorkPodProvider {
   constructor(options = {}) {
     this.name = "sail";
-    this.appName = options.appName ?? process.env.SAIL_APP_NAME ?? "passon";
+    this.appName = options.appName ?? process.env.SAIL_APP_NAME ?? "relay";
     this.private = options.private ?? true;
     this.sdkLoader = options.sdkLoader ?? (() => import("@sailresearch/sdk"));
     this.client = options.client;
@@ -90,7 +90,7 @@ export class SailWorkPodProvider {
 
   async init() {
     if (!process.env.SAIL_API_KEY && !this.client) {
-      const error = new Error("SAIL_API_KEY is required when PASS_ON_WORK_POD_PROVIDER=sail.");
+      const error = new Error("SAIL_API_KEY is required when RELAY_WORK_POD_PROVIDER=sail.");
       error.code = "SAIL_NOT_CONFIGURED";
       throw error;
     }
@@ -134,11 +134,11 @@ export class SailWorkPodProvider {
     const app = await App.find(this.appName, { mintIfMissing: true, client: this.client });
     const box = await Sailbox.create({
       app,
-      name: `passon-${id}`,
+      name: `relay-${id}`,
       private: this.private,
       client: this.client,
     });
-    const rootPath = `/opt/passon/handoffs/${id}`;
+    const rootPath = `/opt/relay/handoffs/${id}`;
     const createdAt = new Date().toISOString();
     const metadata = {
       provider: this.name,
@@ -203,7 +203,7 @@ export class SailWorkPodProvider {
 }
 
 export function createWorkPodProvider(options = {}) {
-  const requested = options.mode ?? process.env.PASS_ON_WORK_POD_PROVIDER ?? "auto";
+  const requested = options.mode ?? process.env.RELAY_WORK_POD_PROVIDER ?? "auto";
   const mode = requested === "auto" ? (process.env.SAIL_API_KEY ? "sail" : "local") : requested;
   if (mode === "sail") return new SailWorkPodProvider(options.sail);
   if (mode === "local") return new LocalWorkPodProvider(options.podDir);

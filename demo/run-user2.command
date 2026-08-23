@@ -24,11 +24,11 @@ fi
 share_url="$(<"$url_file")"
 print
 print "Capability received. Resuming the private Sailbox and pulling CAMP..."
-node bin/passon.mjs pull "$share_url" --target codex
+node bin/relay.mjs pull "$share_url" --target codex
 
 print
 print "Issuing the User 2 responsibility receipt..."
-node bin/passon.mjs accept "$share_url" \
+node bin/relay.mjs accept "$share_url" \
   --actor "user-2-macos" \
   --harness "codex" \
   --goal "Continue the simulated interactive grid puzzle without losing the observed mechanics, tested actions, or remaining uncertainty." \
@@ -37,7 +37,7 @@ node bin/passon.mjs accept "$share_url" \
 print
 print "ACCEPTED  User 2 can continue from the same sealed checkpoint."
 print "Cleaning up the live Sailbox..."
-node bin/passon.mjs terminate "$share_url"
+node bin/relay.mjs terminate "$share_url"
 rm -f "$url_file"
 print "SAILBOX TERMINATED  The short-lived capability is no longer stored in demo output."
 sleep 5

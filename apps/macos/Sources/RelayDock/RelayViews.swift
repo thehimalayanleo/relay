@@ -1,9 +1,9 @@
 import SwiftUI
 
-private let passOnOrange = Color(red: 1.0, green: 90.0 / 255.0, blue: 31.0 / 255.0)
+private let relayOrange = Color(red: 1.0, green: 90.0 / 255.0, blue: 31.0 / 255.0)
 
-struct PassOnRootView: View {
-    @ObservedObject var model: PassOnModel
+struct RelayRootView: View {
+    @ObservedObject var model: RelayModel
 
     var body: some View {
         Group {
@@ -22,7 +22,7 @@ struct PassOnRootView: View {
         Button(action: model.toggle) {
             ZStack {
                 Circle()
-                    .fill(passOnOrange)
+                    .fill(relayOrange)
                 Circle()
                     .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
                 Image(systemName: "arrow.left.arrow.right")
@@ -30,7 +30,7 @@ struct PassOnRootView: View {
                     .foregroundStyle(.white)
             }
             .frame(width: 54, height: 54)
-            .shadow(color: passOnOrange.opacity(0.30), radius: 16, y: 8)
+            .shadow(color: relayOrange.opacity(0.30), radius: 16, y: 8)
         }
         .buttonStyle(.plain)
         .help("Relay context")
@@ -66,7 +66,7 @@ struct PassOnRootView: View {
         HStack(spacing: 10) {
             ZStack {
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(passOnOrange)
+                    .fill(relayOrange)
                 Image(systemName: "arrow.left.arrow.right")
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(.white)
@@ -104,9 +104,9 @@ struct PassOnRootView: View {
         HStack(spacing: 11) {
             Image(systemName: "doc.on.clipboard")
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(passOnOrange)
+                .foregroundStyle(relayOrange)
                 .frame(width: 34, height: 34)
-                .background(passOnOrange.opacity(0.12), in: RoundedRectangle(cornerRadius: 9))
+                .background(relayOrange.opacity(0.12), in: RoundedRectangle(cornerRadius: 9))
             VStack(alignment: .leading, spacing: 3) {
                 Text("Borrowing from")
                     .font(.system(size: 10, weight: .semibold))
@@ -149,7 +149,7 @@ struct PassOnRootView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 9)
                         .background(
-                            model.destination == destination ? passOnOrange : Color.primary.opacity(0.055),
+                            model.destination == destination ? relayOrange : Color.primary.opacity(0.055),
                             in: RoundedRectangle(cornerRadius: 10, style: .continuous)
                         )
                     }
@@ -169,7 +169,7 @@ struct PassOnRootView: View {
                 Spacer()
                 Text("CAMP / H2")
                     .font(.system(size: 8, weight: .bold, design: .monospaced))
-                    .foregroundStyle(passOnOrange)
+                    .foregroundStyle(relayOrange)
             }
             HStack(spacing: 8) {
                 appNode(model.sourceApp, symbol: "square.on.square")
@@ -196,10 +196,10 @@ struct PassOnRootView: View {
             }
         }
         .padding(11)
-        .background(passOnOrange.opacity(0.07), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+        .background(relayOrange.opacity(0.07), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 13, style: .continuous)
-                .strokeBorder(passOnOrange.opacity(0.18))
+                .strokeBorder(relayOrange.opacity(0.18))
         }
     }
 
@@ -218,27 +218,27 @@ struct PassOnRootView: View {
 
     private var lineage: some View {
         HStack(spacing: 0) {
-            Circle().fill(passOnOrange).frame(width: 6, height: 6)
-            Rectangle().fill(passOnOrange.opacity(0.38)).frame(height: 1)
+            Circle().fill(relayOrange).frame(width: 6, height: 6)
+            Rectangle().fill(relayOrange.opacity(0.38)).frame(height: 1)
             ZStack {
-                Circle().fill(passOnOrange.opacity(0.15))
+                Circle().fill(relayOrange.opacity(0.15))
                 Image(systemName: "arrow.right")
                     .font(.system(size: 8, weight: .bold))
-                    .foregroundStyle(passOnOrange)
+                    .foregroundStyle(relayOrange)
             }
             .frame(width: 22, height: 22)
-            Rectangle().fill(passOnOrange.opacity(0.38)).frame(height: 1)
-            Circle().fill(passOnOrange).frame(width: 6, height: 6)
+            Rectangle().fill(relayOrange.opacity(0.38)).frame(height: 1)
+            Circle().fill(relayOrange).frame(width: 6, height: 6)
         }
         .frame(maxWidth: .infinity)
     }
 
     private func statusColor(_ state: TransferState) -> Color {
         switch state {
-        case .captured: return passOnOrange
+        case .captured: return relayOrange
         case .borrowed: return .green
         case .shared: return .blue
-        case .received: return passOnOrange
+        case .received: return relayOrange
         }
     }
 
@@ -282,7 +282,7 @@ struct PassOnRootView: View {
             .foregroundStyle(.white)
             .padding(.horizontal, 14)
             .frame(maxWidth: .infinity, minHeight: 44)
-            .background(passOnOrange, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .background(relayOrange, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
         .buttonStyle(.plain)
         .disabled(model.capsule == nil)

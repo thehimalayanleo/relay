@@ -4,12 +4,12 @@ import { estimateCost } from "../src/cost.mjs";
 
 test("cost model separates token and failure-recovery value", () => {
   const estimate = estimateCost({
-    passonsPerMonth: 1_000,
+    relaysPerMonth: 1_000,
     rawContextTokens: 50_000,
     capsuleTokens: 10_000,
     inputCostPerMillionTokens: 2,
     baselineResumeFailureRate: 0.2,
-    passonResumeFailureRate: 0.1,
+    relayResumeFailureRate: 0.1,
     recoveryMinutesPerFailure: 30,
     loadedLaborCostPerHour: 100,
     monthlyInfrastructureCost: 20,

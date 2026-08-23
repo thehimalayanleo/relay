@@ -19,7 +19,7 @@
     ],
     "partial": [
       "Greptile input is currently a structured local demo fixture unless an authenticated adapter secret is configured",
-      "The public product name is Relay while internal protocol and package identifiers still use PassOn",
+      "The public product name is Relay while internal protocol and package identifiers still use Relay",
       "The current full Node test runner hits a Node 24 native assertion associated with the Sail SDK environment"
     ],
     "blocked": [

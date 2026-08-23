@@ -5,12 +5,12 @@ function finite(value, fallback) {
 
 export function estimateCost(input = {}) {
   const assumptions = {
-    passonsPerMonth: finite(input.passonsPerMonth, 2_000),
+    relaysPerMonth: finite(input.relaysPerMonth, 2_000),
     rawContextTokens: finite(input.rawContextTokens, 100_000),
     capsuleTokens: finite(input.capsuleTokens, 12_000),
     inputCostPerMillionTokens: finite(input.inputCostPerMillionTokens, 3),
     baselineResumeFailureRate: finite(input.baselineResumeFailureRate, 0.18),
-    passonResumeFailureRate: finite(input.passonResumeFailureRate, 0.08),
+    relayResumeFailureRate: finite(input.relayResumeFailureRate, 0.08),
     recoveryMinutesPerFailure: finite(input.recoveryMinutesPerFailure, 30),
     loadedLaborCostPerHour: finite(input.loadedLaborCostPerHour, 100),
     monthlyInfrastructureCost: finite(input.monthlyInfrastructureCost, 50),
@@ -18,12 +18,12 @@ export function estimateCost(input = {}) {
   };
 
   const tokenSavings =
-    assumptions.passonsPerMonth *
+    assumptions.relaysPerMonth *
     Math.max(0, assumptions.rawContextTokens - assumptions.capsuleTokens) *
     assumptions.inputCostPerMillionTokens / 1_000_000;
   const avoidedFailures =
-    assumptions.passonsPerMonth *
-    Math.max(0, assumptions.baselineResumeFailureRate - assumptions.passonResumeFailureRate);
+    assumptions.relaysPerMonth *
+    Math.max(0, assumptions.baselineResumeFailureRate - assumptions.relayResumeFailureRate);
   const recoverySavings =
     avoidedFailures *
     assumptions.recoveryMinutesPerFailure / 60 *

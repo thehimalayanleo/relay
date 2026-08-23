@@ -24,7 +24,7 @@ const sample = {
 test("normalizes and seals a deterministic capsule", () => {
   const now = new Date("2026-08-22T12:00:00.000Z");
   const normalized = normalizeCapsule(sample, now);
-  assert.equal(normalized.schemaVersion, "passon/v1");
+  assert.equal(normalized.schemaVersion, "relay/v1");
   assert.equal(normalized.createdAt, now.toISOString());
   assert.match(digestCapsule(normalized), /^sha256:[0-9a-f]{64}$/);
   assert.equal(canonicalStringify({ b: 2, a: 1 }), '{"a":1,"b":2}');

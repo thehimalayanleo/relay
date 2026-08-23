@@ -3,12 +3,12 @@ import { estimateCost } from "../src/cost.mjs";
 
 const scenarios = {
   conservative: {
-    passonsPerMonth: 500,
+    relaysPerMonth: 500,
     rawContextTokens: 50_000,
     capsuleTokens: 10_000,
     inputCostPerMillionTokens: 2,
     baselineResumeFailureRate: 0.10,
-    passonResumeFailureRate: 0.08,
+    relayResumeFailureRate: 0.08,
     recoveryMinutesPerFailure: 15,
     loadedLaborCostPerHour: 75,
     monthlyInfrastructureCost: 25,
@@ -16,12 +16,12 @@ const scenarios = {
   },
   base: {},
   highVolume: {
-    passonsPerMonth: 10_000,
+    relaysPerMonth: 10_000,
     rawContextTokens: 200_000,
     capsuleTokens: 20_000,
     inputCostPerMillionTokens: 5,
     baselineResumeFailureRate: 0.25,
-    passonResumeFailureRate: 0.08,
+    relayResumeFailureRate: 0.08,
     recoveryMinutesPerFailure: 45,
     loadedLaborCostPerHour: 125,
     monthlyInfrastructureCost: 250,
@@ -36,9 +36,9 @@ function money(value) {
 function print(name, estimate) {
   const { assumptions: a, results: r } = estimate;
   console.log(`\n${name}`);
-  console.log(`  pass-ons / month:        ${a.passonsPerMonth.toLocaleString()}`);
+  console.log(`  relays / month:        ${a.relaysPerMonth.toLocaleString()}`);
   console.log(`  context tokens:          ${a.rawContextTokens.toLocaleString()} -> ${a.capsuleTokens.toLocaleString()}`);
-  console.log(`  assumed resume failures: ${(a.baselineResumeFailureRate * 100).toFixed(1)}% -> ${(a.passonResumeFailureRate * 100).toFixed(1)}%`);
+  console.log(`  assumed resume failures: ${(a.baselineResumeFailureRate * 100).toFixed(1)}% -> ${(a.relayResumeFailureRate * 100).toFixed(1)}%`);
   console.log(`  token savings / month:   ${money(r.tokenSavings)}`);
   console.log(`  recovery savings / month:${money(r.recoverySavings)}`);
   console.log(`  net savings / month:     ${money(r.netMonthlySavings)}`);

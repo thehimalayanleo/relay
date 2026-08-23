@@ -3,16 +3,16 @@ import { createAgentResult } from "./workpods.mjs";
 
 const MAX_OUTPUT_BYTES = 1_000_000;
 
-function configuredArgv(value = process.env.PASS_ON_AGENT_ARGV) {
+function configuredArgv(value = process.env.RELAY_AGENT_ARGV) {
   if (!value) return null;
   let parsed;
   try {
     parsed = JSON.parse(value);
   } catch {
-    throw new Error("PASS_ON_AGENT_ARGV must be a JSON array of command arguments.");
+    throw new Error("RELAY_AGENT_ARGV must be a JSON array of command arguments.");
   }
   if (!Array.isArray(parsed) || !parsed.length || parsed.some((item) => typeof item !== "string" || !item)) {
-    throw new Error("PASS_ON_AGENT_ARGV must be a non-empty JSON string array.");
+    throw new Error("RELAY_AGENT_ARGV must be a non-empty JSON string array.");
   }
   return parsed;
 }
@@ -28,8 +28,8 @@ function boundedAppend(chunks, chunk, state) {
 export class ConfiguredAgentRunner {
   constructor(options = {}) {
     this.argv = options.argv ?? configuredArgv();
-    this.harness = options.harness ?? process.env.PASS_ON_AGENT_HARNESS ?? "configured-agent";
-    this.timeoutMs = options.timeoutMs ?? Number(process.env.PASS_ON_AGENT_TIMEOUT_MS ?? 900_000);
+    this.harness = options.harness ?? process.env.RELAY_AGENT_HARNESS ?? "configured-agent";
+    this.timeoutMs = options.timeoutMs ?? Number(process.env.RELAY_AGENT_TIMEOUT_MS ?? 900_000);
     this.spawnImpl = options.spawnImpl ?? spawn;
   }
 
@@ -43,7 +43,7 @@ export class ConfiguredAgentRunner {
 
   async run(prompt) {
     if (!this.argv) {
-      const error = new Error("No autonomous harness is configured. Set PASS_ON_AGENT_ARGV to a JSON argv array.");
+      const error = new Error("No autonomous harness is configured. Set RELAY_AGENT_ARGV to a JSON argv array.");
       error.code = "AGENT_NOT_CONFIGURED";
       throw error;
     }

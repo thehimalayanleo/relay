@@ -1,6 +1,6 @@
-# PassOn protocol v1
+# Relay protocol v1
 
-PassOn transfers responsibility for an active objective. A valid transfer is more than exporting text: the sender seals a canonical state, the receiver verifies its integrity, and the receiver records what they understood before continuing.
+Relay transfers responsibility for an active objective. A valid transfer is more than exporting text: the sender seals a canonical state, the receiver verifies its integrity, and the receiver records what they understood before continuing.
 
 ## Lifecycle
 
@@ -18,7 +18,7 @@ A capsule must contain:
 
 The normalized v1 capsule also records acceptance criteria, three-valued work status, decisions, constraints, rejected approaches, open questions, artifacts, validation, side effects, a trace summary, stop conditions, source provenance, and the intended recipient.
 
-The JSON transport contract is in `schema/passon-v1.schema.json`.
+The JSON transport contract is in `schema/relay-v1.schema.json`.
 
 ## Invariants
 
@@ -38,7 +38,7 @@ A sender integration should:
 1. Pause at a safe boundary.
 2. Collect state from the workspace, trace, and environment.
 3. Mark each claim by evidence status.
-4. Call `POST /v1/passons`.
+4. Call `POST /v1/relays`.
 5. Share the returned capability URL.
 
 A receiver integration should:

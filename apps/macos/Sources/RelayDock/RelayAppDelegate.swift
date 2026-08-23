@@ -2,8 +2,8 @@ import AppKit
 import SwiftUI
 
 @MainActor
-final class PassOnAppDelegate: NSObject, NSApplicationDelegate {
-    private let model = PassOnModel()
+final class RelayAppDelegate: NSObject, NSApplicationDelegate {
+    private let model = RelayModel()
     private var panel: NSPanel?
     private var lastExternalApplication = "Clipboard"
     private var activationObserver: NSObjectProtocol?
@@ -62,7 +62,7 @@ final class PassOnAppDelegate: NSObject, NSApplicationDelegate {
         panel.hasShadow = true
         panel.hidesOnDeactivate = false
         panel.isMovableByWindowBackground = true
-        panel.contentView = NSHostingView(rootView: PassOnRootView(model: model))
+        panel.contentView = NSHostingView(rootView: RelayRootView(model: model))
         panel.setFrameOrigin(defaultOrigin(for: size))
         panel.orderFrontRegardless()
         self.panel = panel

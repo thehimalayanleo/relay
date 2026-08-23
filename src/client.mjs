@@ -3,7 +3,7 @@ function parseShareUrl(shareUrl) {
   const fragment = new URLSearchParams(parsed.hash.replace(/^#/, ""));
   const id = parsed.searchParams.get("id") ?? fragment.get("id");
   const token = parsed.searchParams.get("token") ?? fragment.get("token");
-  if (!id || !token) throw new Error("PassOn share URL must include an id and capability token.");
+  if (!id || !token) throw new Error("Relay share URL must include an id and capability token.");
   return { origin: parsed.origin, id, token };
 }
 
@@ -12,17 +12,17 @@ async function responseBody(response) {
     ? response.json()
     : response.text();
   const body = await response.json().catch(() => ({}));
-  throw new Error(body.message ?? `PassOn request failed with HTTP ${response.status}.`);
+  throw new Error(body.message ?? `Relay request failed with HTTP ${response.status}.`);
 }
 
-export class PassOnClient {
+export class RelayClient {
   constructor(origin = "http://127.0.0.1:4317", fetchImpl = fetch) {
     this.origin = origin.replace(/\/$/, "");
     this.fetch = fetchImpl;
   }
 
   async create(capsule, options = {}) {
-    return responseBody(await this.fetch(`${this.origin}/v1/passons`, {
+    return responseBody(await this.fetch(`${this.origin}/v1/relays`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -35,28 +35,28 @@ export class PassOnClient {
 
   async read(shareUrl) {
     const { origin, id, token } = parseShareUrl(shareUrl);
-    return responseBody(await this.fetch(`${origin}/v1/passons/${id}`, {
+    return responseBody(await this.fetch(`${origin}/v1/relays/${id}`, {
       headers: { authorization: `Bearer ${token}` },
     }));
   }
 
   async render(shareUrl, target = "generic") {
     const { origin, id, token } = parseShareUrl(shareUrl);
-    return responseBody(await this.fetch(`${origin}/v1/passons/${id}/render?target=${encodeURIComponent(target)}`, {
+    return responseBody(await this.fetch(`${origin}/v1/relays/${id}/render?target=${encodeURIComponent(target)}`, {
       headers: { authorization: `Bearer ${token}` },
     }));
   }
 
   async pullWorkPod(shareUrl) {
     const { origin, id, token } = parseShareUrl(shareUrl);
-    return responseBody(await this.fetch(`${origin}/v1/passons/${id}/pod`, {
+    return responseBody(await this.fetch(`${origin}/v1/relays/${id}/pod`, {
       headers: { authorization: `Bearer ${token}` },
     }));
   }
 
   async runAgent(shareUrl, target = "generic") {
     const { origin, id, token } = parseShareUrl(shareUrl);
-    return responseBody(await this.fetch(`${origin}/v1/passons/${id}/agent/run`, {
+    return responseBody(await this.fetch(`${origin}/v1/relays/${id}/agent/run`, {
       method: "POST",
       headers: {
         authorization: `Bearer ${token}`,
@@ -68,7 +68,7 @@ export class PassOnClient {
 
   async terminateWorkPod(shareUrl) {
     const { origin, id, token } = parseShareUrl(shareUrl);
-    return responseBody(await this.fetch(`${origin}/v1/passons/${id}/pod/terminate`, {
+    return responseBody(await this.fetch(`${origin}/v1/relays/${id}/pod/terminate`, {
       method: "POST",
       headers: { authorization: `Bearer ${token}` },
     }));
@@ -86,7 +86,7 @@ export class PassOnClient {
   async accept(shareUrl, receipt) {
     const { origin, id, token } = parseShareUrl(shareUrl);
     const record = await this.read(shareUrl);
-    return responseBody(await this.fetch(`${origin}/v1/passons/${id}/accept`, {
+    return responseBody(await this.fetch(`${origin}/v1/relays/${id}/accept`, {
       method: "POST",
       headers: {
         authorization: `Bearer ${token}`,

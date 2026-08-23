@@ -14,7 +14,7 @@ The initial wedge is shift changes and cross-team ownership transfers during pro
 
 Relay is a small, vendor-neutral continuation protocol. It sends a verified checkpoint and an acceptance receipt instead of treating a chat transcript as executable state.
 
-The current release is a local or trusted-network prototype. It has no user accounts. Every pass-on gets a random 256-bit capability URL, expires after 72 hours by default, and is stored as a private local JSON file. Put it behind an authenticated gateway before exposing it to the public internet.
+The current release is a local or trusted-network prototype. It has no user accounts. Every relay gets a random 256-bit capability URL, expires after 72 hours by default, and is stored as a private local JSON file. Put it behind an authenticated gateway before exposing it to the public internet.
 
 ## What works
 
@@ -44,6 +44,21 @@ Open `http://127.0.0.1:4317/demo/greptile` after starting Relay Core.
 
 The demo does not claim that Greptile is live unless an authenticated adapter supplied the finding. It also does not claim token or resolution-time savings. Those require the controlled evaluation described below.
 
+## One repository
+
+Relay now ships as one monorepo. The service, browser IDE, CLI, native macOS button, Sail provider, Greptile adapter, A2A surface, and ARC-AGI-3 compatibility harness are versioned together.
+
+```text
+relay/
+├── src/            Relay service and integrations
+├── public/         Browser IDE and one-button UI
+├── apps/macos/     Native Relay button
+├── bin/            Relay CLI
+└── arc-agi-3/      Resumable long-horizon agent harness
+```
+
+The ARC compatibility demonstration proves checkpoint and resume behavior across processes. It is not an official ARC-AGI-3 leaderboard score.
+
 ### Live Greptile MCP
 
 Relay connects to Greptile through the official MCP server rather than an invented REST endpoint. Configure `GREPTILE_API_KEY` on the backend and use:
@@ -72,7 +87,7 @@ See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the stack, integration boundary, 
 Requires Node.js 20 or newer.
 
 ```bash
-cd passon
+cd relay
 npm test
 npm start
 ```
@@ -85,25 +100,25 @@ Create an API key in the [Sail dashboard](https://app.sailresearch.com). Keep it
 
 ```bash
 read -s SAIL_KEY
-security add-generic-password -U -a "$USER" -s passon-sail-api-key -w "$SAIL_KEY"
+security add-generic-password -U -a "$USER" -s relay-sail-api-key -w "$SAIL_KEY"
 unset SAIL_KEY
 ```
 
 Start Relay with the key injected only into the backend process:
 
 ```bash
-SAIL_API_KEY="$(security find-generic-password -a "$USER" -s passon-sail-api-key -w)" npm run start:sail
-node bin/passon.mjs doctor
+SAIL_API_KEY="$(security find-generic-password -a "$USER" -s relay-sail-api-key -w)" npm run start:sail
+node bin/relay.mjs doctor
 ```
 
-The health response should report `"provider": "sail"`. Creating a handoff with `--pod` now creates a private Sailbox, writes the three context files under `/opt/passon/handoffs/<id>`, and pauses the VM. Pulling the handoff resumes it.
+The health response should report `"provider": "sail"`. Creating a handoff with `--pod` now creates a private Sailbox, writes the three context files under `/opt/relay/handoffs/<id>`, and pauses the VM. Pulling the handoff resumes it.
 
 The native floating button lives in [`apps/macos`](./apps/macos). It captures an explicit clipboard selection, renders it for Codex, Claude, or Cursor, and can ask Relay Core to create the same capability link and work pod.
 
-Create a pass-on from another harness:
+Create a relay from another harness:
 
 ```bash
-node bin/passon.mjs create examples/capsule.json
+node bin/relay.mjs create examples/capsule.json
 ```
 
 The response contains a capability `shareUrl`. Paste it into an approved channel or pass it directly to another harness. The recipient only needs a browser.
@@ -114,10 +129,10 @@ The CLI is designed as the orchestration surface for agents and shell workflows.
 
 ```bash
 # Confirm that Relay Core is reachable
-node bin/passon.mjs doctor
+node bin/relay.mjs doctor
 
 # Turn notes or another command's output into a one-button equivalent
-git diff | node bin/passon.mjs handoff - \
+git diff | node bin/relay.mjs handoff - \
   --goal "Finish the parser repair" \
   --next "Run npm test and inspect failures" \
   --to codex \
@@ -125,29 +140,29 @@ git diff | node bin/passon.mjs handoff - \
   --quiet
 
 # Pull the verified record, destination prompt, and work pod in one JSON response
-node bin/passon.mjs pull '<share-url>' --target claude
+node bin/relay.mjs pull '<share-url>' --target claude
 ```
 
-Run `node bin/passon.mjs --help` for the lower-level `create`, `get`, `pod`, `render`, `accept`, and `cost` verbs.
+Run `node bin/relay.mjs --help` for the lower-level `create`, `get`, `pod`, `render`, `accept`, and `cost` verbs.
 
 Terminate the remote work pod when the work is finished:
 
 ```bash
-node bin/passon.mjs terminate '<share-url>'
+node bin/relay.mjs terminate '<share-url>'
 ```
 
 Render the same checkpoint for a receiving harness:
 
 ```bash
-node bin/passon.mjs render '<share-url>' --target codex
-node bin/passon.mjs render '<share-url>' --target claude
-node bin/passon.mjs render '<share-url>' --target cursor
+node bin/relay.mjs render '<share-url>' --target codex
+node bin/relay.mjs render '<share-url>' --target claude
+node bin/relay.mjs render '<share-url>' --target cursor
 ```
 
 Accept responsibility and issue a receipt:
 
 ```bash
-node bin/passon.mjs accept '<share-url>' \
+node bin/relay.mjs accept '<share-url>' \
   --actor agent-2 \
   --harness codex \
   --goal 'Fix the parser regression without changing the public API.' \
@@ -156,17 +171,17 @@ node bin/passon.mjs accept '<share-url>' \
 
 ## Embed one button in any harness UI
 
-Serve `public/passon-button.js`, place the capsule JSON in a script element, then add:
+Serve `public/relay-button.js`, place the capsule JSON in a script element, then add:
 
 ```html
-<script type="module" src="https://your-passon-host/passon-button.js"></script>
+<script type="module" src="https://your-relay-host/relay-button.js"></script>
 <script id="current-checkpoint" type="application/json">{"title":"..."}</script>
-<passon-button
-  endpoint="https://your-passon-host"
+<relay-button
+  endpoint="https://your-relay-host"
   source="#current-checkpoint"
   source-app="Your agent"
   default-target="claude">
-</passon-button>
+</relay-button>
 ```
 
 The component renders a 54-pixel floating port over the host web app. Selecting it adds a light backdrop and a compact transfer space. One action seals the checkpoint and copies the capability link. It does not open a platform share sheet and does not require a handoff form.
@@ -183,22 +198,22 @@ The receiver uses the same capability link to pull that pod context. This makes 
 
 `src/workpods.mjs` is the provider boundary. `SailWorkPodProvider` creates a private persistent VM, writes the CAMP bundle through Sail's filesystem API, pauses it while the handoff waits, resumes it for the recipient, stores autonomous-agent results, and terminates it explicitly. `LocalWorkPodProvider` remains the account-free fallback. Sail credentials stay on the backend and never enter the browser capsule.
 
-The local pod is not a remote CPU and cannot be reached from another laptop unless this service is deployed on a reachable trusted host. The Sail provider is remote compute, but the PassOn API itself still needs to be reachable by both users.
+The local pod is not a remote CPU and cannot be reached from another laptop unless this service is deployed on a reachable trusted host. The Sail provider is remote compute, but the Relay API itself still needs to be reachable by both users.
 
 ## Autonomous continuation and a 5090 model
 
 Relay can hand the sealed resume prompt to one operator-configured command. The capability holder chooses only the renderer, never the command. Configure the command as a JSON argv array:
 
 ```bash
-export PASS_ON_AGENT_HARNESS="deepseek-5090"
-export PASS_ON_AGENT_ARGV='["ssh","5090","python3","/home/ajinkya/passon_agent.py"]'
+export RELAY_AGENT_HARNESS="deepseek-5090"
+export RELAY_AGENT_ARGV='["ssh","5090","python3","/home/ajinkya/relay_agent.py"]'
 npm run start:sail
 ```
 
 The harness receives the resume prompt on stdin and must write its result to stdout. This contract also works with a local model server, OpenCode, or another agent harness. Trigger it with:
 
 ```bash
-node bin/passon.mjs agent '<share-url>' --target generic
+node bin/relay.mjs agent '<share-url>' --target generic
 ```
 
 The result is written back into the same work pod as `agents/<run-id>.json`. This is the first no-human loop. A production scheduler, cancellation API, model endpoint policy, and multi-step supervision remain future work.
@@ -206,27 +221,27 @@ The result is written back into the same work pod as `agents/<run-id>.json`. Thi
 Node-based harnesses can use the client directly:
 
 ```js
-import { PassOnClient } from "./src/client.mjs";
+import { RelayClient } from "./src/client.mjs";
 
-const passon = new PassOnClient("http://127.0.0.1:4317");
-const transfer = await passon.create(currentCheckpoint, { workPod: true });
-const codexPrompt = await passon.render(transfer.shareUrl, "codex");
-const resumed = await passon.pull(transfer.shareUrl, "codex");
+const relay = new RelayClient("http://127.0.0.1:4317");
+const transfer = await relay.create(currentCheckpoint, { workPod: true });
+const codexPrompt = await relay.render(transfer.shareUrl, "codex");
+const resumed = await relay.pull(transfer.shareUrl, "codex");
 ```
 
-The transport schema is published at `schema/passon-v1.schema.json` so non-JavaScript harnesses can implement the same contract.
+The transport schema is published at `schema/relay-v1.schema.json` so non-JavaScript harnesses can implement the same contract.
 
 ## Minimal API
 
 | Method | Route | Purpose |
 | --- | --- | --- |
-| `POST` | `/v1/passons` | Normalize, scan, seal, and store a capsule |
-| `GET` | `/v1/passons/:id` | Fetch and integrity-check a capsule |
-| `GET` | `/v1/passons/:id/render?target=codex` | Produce a harness-specific resume prompt |
-| `GET` | `/v1/passons/:id/pod` | Pull the sealed work-pod context bundle |
-| `POST` | `/v1/passons/:id/agent/run` | Run the backend-configured autonomous harness |
-| `POST` | `/v1/passons/:id/pod/terminate` | Permanently terminate the attached work pod |
-| `POST` | `/v1/passons/:id/accept` | Record the recipient's understanding and first action |
+| `POST` | `/v1/relays` | Normalize, scan, seal, and store a capsule |
+| `GET` | `/v1/relays/:id` | Fetch and integrity-check a capsule |
+| `GET` | `/v1/relays/:id/render?target=codex` | Produce a harness-specific resume prompt |
+| `GET` | `/v1/relays/:id/pod` | Pull the sealed work-pod context bundle |
+| `POST` | `/v1/relays/:id/agent/run` | Run the backend-configured autonomous harness |
+| `POST` | `/v1/relays/:id/pod/terminate` | Permanently terminate the attached work pod |
+| `POST` | `/v1/relays/:id/accept` | Record the recipient's understanding and first action |
 | `POST` | `/v1/cost-estimate` | Run the configurable unit-economics model |
 
 Use `Authorization: Bearer <capability-token>` for recipient API calls. The receiver link carries the token in its URL fragment, so browsers do not send the capability to the server as part of the page request.
@@ -252,7 +267,7 @@ Planning-level build ranges, not vendor quotes:
 - Team pilot with two real harness integrations and evaluation: 6 to 10 engineer-weeks, roughly $50k to $150k.
 - Production service with SSO, policy, revocation, encrypted artifact storage, audit, and reliability work: 3 to 6 engineer-months, roughly $150k to $500k.
 
-To replace assumptions with evidence, run interrupted tasks under four conditions: fresh start, raw transcript, naive summary, and PassOn. Record task success, time to first correct action, input tokens, repeated actions, false inherited claims, and duplicate side effects. Put the observations in the format of `examples/eval-results.example.json`, then run:
+To replace assumptions with evidence, run interrupted tasks under four conditions: fresh start, raw transcript, naive summary, and Relay. Record task success, time to first correct action, input tokens, repeated actions, false inherited claims, and duplicate side effects. Put the observations in the format of `examples/eval-results.example.json`, then run:
 
 ```bash
 node scripts/evaluate.mjs path/to/measured-results.json

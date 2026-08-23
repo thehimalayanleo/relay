@@ -9,7 +9,7 @@
   <key>CFBundleExecutable</key>
   <string>Relay</string>
   <key>CFBundleIdentifier</key>
-  <string>org.passon.dock</string>
+  <string>org.relay.dock</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
@@ -30,14 +30,14 @@
   <array>
     <dict>
       <key>CFBundleTypeName</key>
-      <string>PassOn Capsule</string>
+      <string>Relay Capsule</string>
       <key>CFBundleTypeRole</key>
       <string>Viewer</string>
       <key>LSHandlerRank</key>
       <string>Owner</string>
       <key>LSItemContentTypes</key>
       <array>
-        <string>org.passon.capsule</string>
+        <string>org.relay.capsule</string>
       </array>
     </dict>
   </array>
@@ -50,17 +50,17 @@
         <string>public.data</string>
       </array>
       <key>UTTypeDescription</key>
-      <string>PassOn Capsule</string>
+      <string>Relay Capsule</string>
       <key>UTTypeIdentifier</key>
-      <string>org.passon.capsule</string>
+      <string>org.relay.capsule</string>
       <key>UTTypeTagSpecification</key>
       <dict>
         <key>public.filename-extension</key>
         <array>
-          <string>passon</string>
+          <string>relay</string>
         </array>
         <key>public.mime-type</key>
-        <string>application/vnd.passon+json</string>
+        <string>application/vnd.relay+json</string>
       </dict>
     </dict>
   </array>

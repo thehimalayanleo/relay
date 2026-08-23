@@ -1,0 +1,17 @@
+[project]
+name = "relay-arc-agi-3"
+version = "0.1.0"
+description = "A resumable long-horizon agent harness for ARC-AGI-3"
+readme = "README.md"
+requires-python = ">=3.11"
+
+[project.scripts]
+relay-arc = "relay_arc.cli:main"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"

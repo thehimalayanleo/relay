@@ -12,7 +12,7 @@ export class FileStore {
   }
 
   fileFor(id) {
-    if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error("Invalid pass-on id.");
+    if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error("Invalid relay id.");
     return path.join(this.root, `${id}.json`);
   }
 

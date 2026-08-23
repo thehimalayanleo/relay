@@ -23,7 +23,7 @@ function errorData(error) {
   return [{
     "@type": "type.googleapis.com/google.rpc.ErrorInfo",
     reason: error.reason ?? "A2A_REQUEST_FAILED",
-    domain: "passon.local",
+    domain: "relay.local",
   }];
 }
 
@@ -50,18 +50,18 @@ function candidateUrls(text) {
 function dataCapability(data) {
   if (typeof data === "string") return data;
   if (!data || typeof data !== "object" || Array.isArray(data)) return "";
-  return data.passonCapabilityUrl
+  return data.relayCapabilityUrl
     ?? data.shareUrl
-    ?? data.passon?.shareUrl
-    ?? data.passon?.capabilityUrl
+    ?? data.relay?.shareUrl
+    ?? data.relay?.capabilityUrl
     ?? "";
 }
 
 function requestOptions(parts) {
   for (const part of parts) {
     if (!part?.data || typeof part.data !== "object" || Array.isArray(part.data)) continue;
-    const options = part.data.passon && typeof part.data.passon === "object"
-      ? part.data.passon
+    const options = part.data.relay && typeof part.data.relay === "object"
+      ? part.data.relay
       : part.data;
     if (options.action || options.target) {
       return { action: options.action ?? "pull", target: options.target ?? "generic" };
@@ -70,7 +70,7 @@ function requestOptions(parts) {
   return { action: "pull", target: "generic" };
 }
 
-export function parsePassOnCapability(parts) {
+export function parseRelayCapability(parts) {
   const candidates = [];
   for (const part of parts) {
     candidates.push(...candidateUrls(part?.text));
@@ -91,7 +91,7 @@ export function parsePassOnCapability(parts) {
     }
   }
   invalidParams(
-    "A local PassOn receiver capability URL with id and token is required.",
+    "A local Relay receiver capability URL with id and token is required.",
     "message.parts",
   );
 }
@@ -127,7 +127,7 @@ function validateRequest(body, version) {
 
 function unavailable(error) {
   if (["NOT_FOUND", "FORBIDDEN", "EXPIRED", "INTEGRITY_FAILURE"].includes(error?.code)) {
-    return new A2aError(-32001, "PassOn handoff is unavailable.", "TASK_NOT_FOUND");
+    return new A2aError(-32001, "Relay handoff is unavailable.", "TASK_NOT_FOUND");
   }
   if (["AGENT_NOT_CONFIGURED", "POD_UNAVAILABLE"].includes(error?.code)) {
     return new A2aError(-32004, error.message, "UNSUPPORTED_OPERATION");
@@ -178,14 +178,14 @@ async function runAgent(record, dependencies, target) {
 
 export function createA2aAgentCard(origin) {
   return {
-    name: "PassOn Context Port",
-    description: "Pulls a sealed PassOn handoff into another agent and can invoke a configured autonomous harness.",
+    name: "Relay Context Port",
+    description: "Pulls a sealed Relay handoff into another agent and can invoke a configured autonomous harness.",
     supportedInterfaces: [{
       url: `${origin.replace(/\/$/, "")}/a2a`,
       protocolBinding: "JSONRPC",
       protocolVersion: A2A_PROTOCOL_VERSION,
     }],
-    provider: { organization: "PassOn", url: origin },
+    provider: { organization: "Relay", url: origin },
     version: "0.1.0",
     capabilities: {
       streaming: false,
@@ -197,13 +197,13 @@ export function createA2aAgentCard(origin) {
     defaultInputModes: ["text/plain", "application/json"],
     defaultOutputModes: ["text/plain", "application/json"],
     skills: [{
-      id: "passon-handoff",
-      name: "PassOn handoff",
-      description: "Pull a local PassOn capability URL. A structured data part may set action to pull or agent-run and target to a supported harness renderer. The capability URL authorizes only its named handoff; no server-level A2A authentication is configured.",
+      id: "relay-handoff",
+      name: "Relay handoff",
+      description: "Pull a local Relay capability URL. A structured data part may set action to pull or agent-run and target to a supported harness renderer. The capability URL authorizes only its named handoff; no server-level A2A authentication is configured.",
       tags: ["handoff", "context", "long-horizon", "agent-continuation"],
       examples: [
         "Continue from http://127.0.0.1:4317/receiver#id=<uuid>&token=<capability>",
-        "{\"passon\":{\"shareUrl\":\"<url>\",\"action\":\"agent-run\",\"target\":\"generic\"}}",
+        "{\"relay\":{\"shareUrl\":\"<url>\",\"action\":\"agent-run\",\"target\":\"generic\"}}",
       ],
       inputModes: ["text/plain", "application/json"],
       outputModes: ["text/plain", "application/json"],
@@ -215,21 +215,21 @@ export async function handleA2aJsonRpc(body, dependencies, options = {}) {
   const id = body && typeof body === "object" ? body.id : null;
   try {
     const message = validateRequest(body, options.version ?? "0.3");
-    const { id: passonId, token } = parsePassOnCapability(message.parts);
+    const { id: relayId, token } = parseRelayCapability(message.parts);
     const { action, target } = requestOptions(message.parts);
     if (!SUPPORTED_TARGETS.includes(target)) invalidParams(`Unsupported target: ${target}`, "message.parts.data.target");
     if (!["pull", "agent-run"].includes(action)) {
       invalidParams("action must be pull or agent-run.", "message.parts.data.action");
     }
 
-    const record = assertReadable(await dependencies.store.get(passonId), token);
+    const record = assertReadable(await dependencies.store.get(relayId), token);
     const output = action === "agent-run"
       ? await runAgent(record, dependencies, target)
       : await pullHandoff(record, dependencies, target);
     const contextId = message.contextId || randomUUID();
     const summary = action === "agent-run"
-      ? `PassOn autonomous continuation finished with status ${output.status}.`
-      : `PassOn handoff ${record.id} is ready to continue.`;
+      ? `Relay autonomous continuation finished with status ${output.status}.`
+      : `Relay handoff ${record.id} is ready to continue.`;
     return {
       jsonrpc: "2.0",
       id,
@@ -243,7 +243,7 @@ export async function handleA2aJsonRpc(body, dependencies, options = {}) {
             { data: output, mediaType: "application/json" },
           ],
           metadata: {
-            passonId: record.id,
+            relayId: record.id,
             digest: record.digest,
             authorization: "capability-url",
           },

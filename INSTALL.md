@@ -23,12 +23,12 @@ The recipient needs Node.js 20 or newer. OpenCode is needed only for the backgro
 
 ## Install from the private repository
 
-The recipient needs access to `thehimalayanleo/passon-context-port`, Homebrew, and GitHub CLI.
+The recipient needs access to `thehimalayanleo/relay`, Homebrew, and GitHub CLI.
 
 ```bash
 gh auth login
 gh auth setup-git
-brew tap thehimalayanleo/relay https://github.com/thehimalayanleo/passon-context-port.git
+brew tap thehimalayanleo/relay https://github.com/thehimalayanleo/relay.git
 brew install thehimalayanleo/relay/relay
 relay doctor
 ```
@@ -38,8 +38,8 @@ relay doctor
 OpenCode must already be signed in on the laptop. No additional model key is required.
 
 ```bash
-export PASS_ON_AGENT_HARNESS='OpenCode Ox Alpha'
-export PASS_ON_AGENT_ARGV='["opencode","run","--pure","--model","opencode-go/ox-alpha-free","--dir","'"$PWD"'"]'
+export RELAY_AGENT_HARNESS='OpenCode Ox Alpha'
+export RELAY_AGENT_ARGV='["opencode","run","--pure","--model","opencode-go/ox-alpha-free","--dir","'"$PWD"'"]'
 relay serve
 ```
 
@@ -62,7 +62,7 @@ This preview is ad-hoc signed, not notarized. On first launch, Control-click Rel
 ## Build locally instead
 
 ```bash
-gh repo clone thehimalayanleo/passon-context-port relay
+gh repo clone thehimalayanleo/relay relay
 cd relay
 npm ci
 npm run package

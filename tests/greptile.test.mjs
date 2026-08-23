@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { greptileHandoffCapsule, normalizeGreptileFinding } from "../src/greptile.mjs";
 import { createRecord } from "../src/protocol.mjs";
-import { createPassOnServer } from "../src/server.mjs";
+import { createRelayServer } from "../src/server.mjs";
 
 const finding = {
   id: "review-comment-42",
@@ -61,7 +61,7 @@ test("local Greptile adapter creates a real work-pod handoff and labels demo mod
     : false,
 }, async () => {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), "relay-greptile-test-"));
-  const server = await createPassOnServer({
+  const server = await createRelayServer({
     dataDir,
     podDir: path.join(dataDir, "pods"),
     workPodMode: "local",
@@ -86,7 +86,7 @@ test("local Greptile adapter creates a real work-pod handoff and labels demo mod
     const capability = new URL(created.shareUrl);
     const id = capability.hash.match(/id=([^&]+)/)[1];
     const token = capability.hash.match(/token=([^&]+)/)[1];
-    const recordResponse = await fetch(`${origin}/v1/passons/${id}?token=${token}`);
+    const recordResponse = await fetch(`${origin}/v1/relays/${id}?token=${token}`);
     assert.equal(recordResponse.status, 200);
     const record = await recordResponse.json();
     assert.equal(record.capsule.memories[0].source, "greptile");

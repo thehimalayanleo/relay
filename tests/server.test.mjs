@@ -3,8 +3,8 @@ import test from "node:test";
 import { mkdtemp } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { createPassOnServer } from "../src/server.mjs";
-import { PassOnClient } from "../src/client.mjs";
+import { createRelayServer } from "../src/server.mjs";
+import { RelayClient } from "../src/client.mjs";
 
 const capsule = {
   title: "Cross-harness resume",
@@ -16,8 +16,8 @@ const capsule = {
 };
 
 async function withServer(fn, options = {}) {
-  const dataDir = await mkdtemp(path.join(os.tmpdir(), "passon-test-"));
-  const server = await createPassOnServer({
+  const dataDir = await mkdtemp(path.join(os.tmpdir(), "relay-test-"));
+  const server = await createRelayServer({
     dataDir,
     podDir: path.join(dataDir, "pods"),
     workPodMode: "local",
@@ -38,12 +38,12 @@ test("create, render, accept, and read receipt end to end", async () => {
     assert.equal(landing.status, 200);
     const landingHtml = await landing.text();
     assert.match(landingHtml, /Forge Agent Workspace/);
-    assert.match(landingHtml, /<passon-button/);
+    assert.match(landingHtml, /<relay-button/);
     const landingHead = await fetch(origin, { method: "HEAD" });
     assert.equal(landingHead.status, 200);
     assert.match(landingHead.headers.get("content-type"), /^text\/html/);
 
-    const createdResponse = await fetch(`${origin}/v1/passons`, {
+    const createdResponse = await fetch(`${origin}/v1/relays`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ capsule, ttlHours: 24 }),
@@ -53,20 +53,20 @@ test("create, render, accept, and read receipt end to end", async () => {
     assert.match(created.shareUrl, /^http:\/\/127\.0\.0\.1:.+\/receiver#id=/);
 
     const headers = { authorization: `Bearer ${created.token}` };
-    const recordResponse = await fetch(`${origin}/v1/passons/${created.id}`, { headers });
+    const recordResponse = await fetch(`${origin}/v1/relays/${created.id}`, { headers });
     assert.equal(recordResponse.status, 200);
     const record = await recordResponse.json();
     assert.equal(record.status, "sealed");
     assert.equal(record.tokenHash, undefined);
 
-    const unauthorized = await fetch(`${origin}/v1/passons/${created.id}`);
+    const unauthorized = await fetch(`${origin}/v1/relays/${created.id}`);
     assert.equal(unauthorized.status, 403);
 
-    const rendered = await fetch(`${origin}/v1/passons/${created.id}/render?target=cursor`, { headers });
+    const rendered = await fetch(`${origin}/v1/relays/${created.id}/render?target=cursor`, { headers });
     assert.equal(rendered.status, 200);
     assert.match(await rendered.text(), /Open the relevant project in Cursor/);
 
-    const accepted = await fetch(`${origin}/v1/passons/${created.id}/accept`, {
+    const accepted = await fetch(`${origin}/v1/relays/${created.id}/accept`, {
       method: "POST",
       headers: { ...headers, "content-type": "application/json" },
       body: JSON.stringify({
@@ -79,7 +79,7 @@ test("create, render, accept, and read receipt end to end", async () => {
     });
     assert.equal(accepted.status, 201);
 
-    const finalRecord = await (await fetch(`${origin}/v1/passons/${created.id}`, { headers })).json();
+    const finalRecord = await (await fetch(`${origin}/v1/relays/${created.id}`, { headers })).json();
     assert.equal(finalRecord.status, "accepted");
     assert.equal(finalRecord.receipts[0].actor, "worker-2");
   });
@@ -87,7 +87,7 @@ test("create, render, accept, and read receipt end to end", async () => {
 
 test("secret-bearing capsules fail closed", async () => {
   await withServer(async (origin) => {
-    const response = await fetch(`${origin}/v1/passons`, {
+    const response = await fetch(`${origin}/v1/relays`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ capsule: { ...capsule, traceSummary: `ghp_${"a".repeat(24)}` } }),
@@ -104,18 +104,18 @@ test("cost endpoint returns transparent assumptions", async () => {
     const response = await fetch(`${origin}/v1/cost-estimate`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ passonsPerMonth: 100 }),
+      body: JSON.stringify({ relaysPerMonth: 100 }),
     });
     assert.equal(response.status, 200);
     const estimate = await response.json();
-    assert.equal(estimate.assumptions.passonsPerMonth, 100);
+    assert.equal(estimate.assumptions.relaysPerMonth, 100);
     assert.match(estimate.warning, /not empirical proof/);
   });
 });
 
 test("JavaScript client transfers and pulls the same capsule across harness renderers", async () => {
   await withServer(async (origin) => {
-    const client = new PassOnClient(origin);
+    const client = new RelayClient(origin);
     const created = await client.create(capsule, { ttlHours: 4, workPod: true });
     const record = await client.read(created.shareUrl);
     assert.equal(record.capsule.goal, capsule.goal);
@@ -136,7 +136,7 @@ test("JavaScript client transfers and pulls the same capsule across harness rend
 
 test("work pod packages and returns sealed tribal context", async () => {
   await withServer(async (origin) => {
-    const createdResponse = await fetch(`${origin}/v1/passons`, {
+    const createdResponse = await fetch(`${origin}/v1/relays`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ capsule, workPod: { requested: true } }),
@@ -146,7 +146,7 @@ test("work pod packages and returns sealed tribal context", async () => {
     assert.equal(created.workPod.provider, "local-demo");
     assert.equal(created.workPod.state, "ready");
 
-    const podResponse = await fetch(`${origin}/v1/passons/${created.id}/pod`, {
+    const podResponse = await fetch(`${origin}/v1/relays/${created.id}/pod`, {
       headers: { authorization: `Bearer ${created.token}` },
     });
     assert.equal(podResponse.status, 200);
@@ -172,7 +172,7 @@ test("capability holder can run a configured autonomous harness and terminate th
     }),
   };
   await withServer(async (origin) => {
-    const client = new PassOnClient(origin);
+    const client = new RelayClient(origin);
     const created = await client.create(capsule, { workPod: true });
     const run = await client.runAgent(created.shareUrl, "generic");
     assert.equal(run.status, "agent-completed");

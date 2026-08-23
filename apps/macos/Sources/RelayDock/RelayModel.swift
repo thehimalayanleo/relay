@@ -21,7 +21,7 @@ struct TransferSpace: Codable, Equatable, Identifiable {
 }
 
 @MainActor
-final class PassOnModel: ObservableObject {
+final class RelayModel: ObservableObject {
     @Published var isExpanded = false
     @Published var destination: Destination = .claude
     @Published var sourceApp = "Clipboard"
@@ -31,8 +31,8 @@ final class PassOnModel: ObservableObject {
     @Published var serviceAvailable = false
     @Published var serviceMode = "LOCAL"
     @Published var lastShareURL: URL?
-    @Published var importedCapsule: PassOnCapsule?
-    @Published var activeCapsule: PassOnCapsule?
+    @Published var importedCapsule: RelayCapsule?
+    @Published var activeCapsule: RelayCapsule?
     @Published var recentSpaces: [TransferSpace] = []
 
     var previousAppProvider: () -> String = { "Clipboard" }
@@ -40,13 +40,13 @@ final class PassOnModel: ObservableObject {
     var sizeHandler: ((Bool) -> Void)?
 
     private let serviceBaseURL = URL(string: "http://127.0.0.1:4317")!
-    private let spacesDefaultsKey = "passon.transfer-spaces.v1"
+    private let spacesDefaultsKey = "relay.transfer-spaces.v1"
 
     init() {
         loadSpaces()
     }
 
-    var capsule: PassOnCapsule? {
+    var capsule: RelayCapsule? {
         importedCapsule ?? activeCapsule
     }
 
@@ -77,7 +77,7 @@ final class PassOnModel: ObservableObject {
         }
         importedCapsule = nil
         capturedText = text
-        activeCapsule = PassOnCapsule.fromClipboard(text, sourceApp: sourceApp, destination: destination)
+        activeCapsule = RelayCapsule.fromClipboard(text, sourceApp: sourceApp, destination: destination)
         notice = "Captured from \(sourceApp). Nothing has been sent."
         Task { await checkService() }
     }
@@ -130,7 +130,7 @@ final class PassOnModel: ObservableObject {
                 .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
             let url = FileManager.default.temporaryDirectory
                 .appendingPathComponent(safeTitle.isEmpty ? "borrowed-context" : safeTitle)
-                .appendingPathExtension("passon")
+                .appendingPathExtension("relay")
             try data.write(to: url, options: .atomic)
             recordSpace(capsule, state: .shared)
             notice = "Portable capsule ready. Choose a destination or save it."
@@ -142,10 +142,10 @@ final class PassOnModel: ObservableObject {
 
     func importCapsule() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [UTType(filenameExtension: "passon") ?? .json, .json]
+        panel.allowedContentTypes = [UTType(filenameExtension: "relay") ?? .json, .json]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
-        panel.message = "Open a .passon capsule received from another person or laptop."
+        panel.message = "Open a .relay capsule received from another person or laptop."
         if panel.runModal() == .OK, let url = panel.url {
             loadCapsule(from: url)
         }
@@ -155,7 +155,7 @@ final class PassOnModel: ObservableObject {
         do {
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
-            let decoded = try decoder.decode(PassOnCapsule.self, from: Data(contentsOf: url))
+            let decoded = try decoder.decode(RelayCapsule.self, from: Data(contentsOf: url))
             importedCapsule = decoded
             activeCapsule = nil
             capturedText = decoded.traceSummary
@@ -170,7 +170,7 @@ final class PassOnModel: ObservableObject {
         }
     }
 
-    private func recordSpace(_ capsule: PassOnCapsule, state: TransferState) {
+    private func recordSpace(_ capsule: RelayCapsule, state: TransferState) {
         let item = TransferSpace(
             id: UUID(),
             campSpaceId: capsule.camp?.spaceId ?? UUID(),
@@ -220,12 +220,12 @@ final class PassOnModel: ObservableObject {
         }
     }
 
-    private func publishToService(_ capsule: PassOnCapsule, copyLink: Bool) async {
+    private func publishToService(_ capsule: RelayCapsule, copyLink: Bool) async {
         guard serviceAvailable else { return }
         isWorking = true
         defer { isWorking = false }
         do {
-            var request = URLRequest(url: serviceBaseURL.appendingPathComponent("v1/passons"))
+            var request = URLRequest(url: serviceBaseURL.appendingPathComponent("v1/relays"))
             request.httpMethod = "POST"
             request.setValue("application/json", forHTTPHeaderField: "content-type")
             request.httpBody = try JSONEncoder().encode(ServiceCreateRequest(

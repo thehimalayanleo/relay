@@ -25,7 +25,7 @@ export function renderPrompt(record, target = "generic") {
   };
   const instruction = targetInstructions[target] ?? targetInstructions.generic;
 
-  return `# PassOn: ${c.title}
+  return `# Relay: ${c.title}
 
 Integrity: ${record.digest}
 Source: ${c.source.harness}${c.source.model ? ` / ${c.source.model}` : ""}

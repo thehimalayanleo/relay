@@ -57,18 +57,18 @@
   ],
   "validation": [
     {
-      "command": "node bin/passon.mjs create demo/arc-agi-3-scenario.json --pod",
+      "command": "node bin/relay.mjs create demo/arc-agi-3-scenario.json --pod",
       "result": "Storyboard command only; run during the live demo to create the Sail-backed handoff",
       "status": "not_run"
     },
     {
-      "command": "node bin/passon.mjs pull '<share-url>' --target codex",
+      "command": "node bin/relay.mjs pull '<share-url>' --target codex",
       "result": "Storyboard command only; run on the recipient Mac to verify the transferred capsule and work pod",
       "status": "not_run"
     }
   ],
   "sideEffects": [
-    "The live demo will create a capability link and a Sailbox when PassOn is configured with Sail",
+    "The live demo will create a capability link and a Sailbox when Relay is configured with Sail",
     "The optional autonomous run may write a proposal artifact into the work pod"
   ],
   "traceSummary": "WORKFLOW SIMULATION ONLY. User 1 explored an invented ARC-AGI-3-like grid in a Docker agent harness. Two mechanics were observed: the cyan tile toggles amber gates, and the green marker advances one cell while preserving orientation. Two actions lost simulated lives and must not be repeated. The purple tile remains unexplained. No official task, evaluation server, score, or benchmark result is represented here.",
@@ -82,7 +82,7 @@
     "harness": "docker-simulated-agent",
     "model": "scenario-fixture-no-model-run",
     "actor": "user-1",
-    "taskId": "arc-like-passon-demo-001"
+    "taskId": "arc-like-relay-demo-001"
   },
   "intendedRecipient": "user-2-macos-or-optional-5090-agent"
 }

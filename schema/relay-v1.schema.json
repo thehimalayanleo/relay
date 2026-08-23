@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://passon.local/schema/passon-v1.schema.json",
-  "title": "PassOn Capsule v1",
+  "$id": "https://relay.local/schema/relay-v1.schema.json",
+  "title": "Relay Capsule v1",
   "type": "object",
   "required": ["title", "goal", "nextAction"],
   "properties": {

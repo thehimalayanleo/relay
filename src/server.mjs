@@ -29,7 +29,7 @@ const staticFiles = new Map([
   ["/styles.css", ["styles.css", "text/css; charset=utf-8"]],
   ["/app.js", ["app.js", "text/javascript; charset=utf-8"]],
   ["/receiver.js", ["receiver.js", "text/javascript; charset=utf-8"]],
-  ["/passon-button.js", ["passon-button.js", "text/javascript; charset=utf-8"]],
+  ["/relay-button.js", ["relay-button.js", "text/javascript; charset=utf-8"]],
 ]);
 
 function sendJson(response, status, value, headers = {}) {
@@ -114,20 +114,20 @@ function receiptFrom(body, record, now = new Date()) {
   };
 }
 
-export async function createPassOnServer(options = {}) {
+export async function createRelayServer(options = {}) {
   const store = options.store ?? new FileStore(
-    options.dataDir ?? process.env.PASS_ON_DATA_DIR ?? path.join(projectRoot, ".data"),
+    options.dataDir ?? process.env.RELAY_DATA_DIR ?? path.join(projectRoot, ".data"),
   );
   await store.init();
   const workPodProvider = options.workPodProvider ?? createWorkPodProvider({
     mode: options.workPodMode,
-    podDir: options.podDir ?? process.env.PASS_ON_POD_DIR ?? path.join(projectRoot, ".pods"),
+    podDir: options.podDir ?? process.env.RELAY_POD_DIR ?? path.join(projectRoot, ".pods"),
     sail: options.sail,
   });
   await workPodProvider.init();
   const agentRunner = options.agentRunner ?? new ConfiguredAgentRunner();
   const greptileClient = options.greptileClient ?? new GreptileMcpClient();
-  const corsOrigin = options.corsOrigin ?? process.env.PASS_ON_CORS_ORIGIN ?? "*";
+  const corsOrigin = options.corsOrigin ?? process.env.RELAY_CORS_ORIGIN ?? "*";
 
   return createHttpServer(async (request, response) => {
     const url = new URL(request.url, `http://${request.headers.host ?? "localhost"}`);
@@ -155,7 +155,7 @@ export async function createPassOnServer(options = {}) {
       if (request.method === "GET" && url.pathname === "/health") {
         sendJson(response, 200, {
           ok: true,
-          protocol: "passon/v1",
+          protocol: "relay/v1",
           workPod: workPodProvider.status(),
           autonomousAgent: agentRunner.status(),
           integrations: {
@@ -172,7 +172,7 @@ export async function createPassOnServer(options = {}) {
 
       if (request.method === "GET" && url.pathname === "/v1/demo/arc-run") {
         const runPath = process.env.RELAY_ARC_RUN_PATH
-          ?? path.join(projectRoot, "..", "relay-arc-agi-3", "artifacts", "live-episode.json");
+          ?? path.join(projectRoot, "arc-agi-3", "examples", "completed-episode.json");
         const run = JSON.parse(await readFile(runPath, "utf-8"));
         sendJson(response, 200, {
           ...run,
@@ -183,7 +183,7 @@ export async function createPassOnServer(options = {}) {
 
       if (request.method === "POST" && url.pathname === "/v1/demo/arc-tests") {
         const arcRoot = process.env.RELAY_ARC_REPO
-          ?? path.join(projectRoot, "..", "relay-arc-agi-3");
+          ?? path.join(projectRoot, "arc-agi-3");
         const { stdout, stderr } = await execFileAsync("python3", ["tests/run_tests.py"], {
           cwd: arcRoot,
           timeout: 30_000,
@@ -365,7 +365,7 @@ export async function createPassOnServer(options = {}) {
         response.writeHead(200, {
           "content-type": "application/json; charset=utf-8",
           "cache-control": "public, max-age=300",
-          etag: `W/\"passon-a2a-${card.version}\"`,
+          etag: `W/\"relay-a2a-${card.version}\"`,
         });
         response.end(request.method === "HEAD" ? undefined : body);
         return;
@@ -390,7 +390,7 @@ export async function createPassOnServer(options = {}) {
         return;
       }
 
-      if (request.method === "POST" && url.pathname === "/v1/passons") {
+      if (request.method === "POST" && url.pathname === "/v1/relays") {
         const body = await readJson(request);
         const ttlHours = Number(body.ttlHours ?? 72);
         if (!(ttlHours > 0 && ttlHours <= 168)) throw new Error("ttlHours must be between 0 and 168.");
@@ -421,11 +421,11 @@ export async function createPassOnServer(options = {}) {
         return;
       }
 
-      const podMatch = url.pathname.match(/^\/v1\/passons\/([0-9a-f-]{36})\/pod$/i);
+      const podMatch = url.pathname.match(/^\/v1\/relays\/([0-9a-f-]{36})\/pod$/i);
       if (request.method === "GET" && podMatch) {
         const record = assertReadable(await store.get(podMatch[1]), requestToken(request, url));
         if (!record.workPod) {
-          const error = new Error("This pass-on has no work pod.");
+          const error = new Error("This relay has no work pod.");
           error.code = "NOT_FOUND";
           throw error;
         }
@@ -436,14 +436,14 @@ export async function createPassOnServer(options = {}) {
         return;
       }
 
-      const terminatePodMatch = url.pathname.match(/^\/v1\/passons\/([0-9a-f-]{36})\/pod\/terminate$/i);
+      const terminatePodMatch = url.pathname.match(/^\/v1\/relays\/([0-9a-f-]{36})\/pod\/terminate$/i);
       if (request.method === "POST" && terminatePodMatch) {
         const token = requestToken(request, url);
         let terminated;
         const updated = await store.update(terminatePodMatch[1], async (record) => {
           assertReadable(record, token);
           if (!record.workPod) {
-            const error = new Error("This pass-on has no work pod.");
+            const error = new Error("This relay has no work pod.");
             error.code = "NOT_FOUND";
             throw error;
           }
@@ -451,7 +451,7 @@ export async function createPassOnServer(options = {}) {
           return { ...record, workPod: terminated };
         });
         if (!updated) {
-          const error = new Error("Pass-on not found.");
+          const error = new Error("Relay not found.");
           error.code = "NOT_FOUND";
           throw error;
         }
@@ -459,7 +459,7 @@ export async function createPassOnServer(options = {}) {
         return;
       }
 
-      const agentRunMatch = url.pathname.match(/^\/v1\/passons\/([0-9a-f-]{36})\/agent\/run$/i);
+      const agentRunMatch = url.pathname.match(/^\/v1\/relays\/([0-9a-f-]{36})\/agent\/run$/i);
       if (request.method === "POST" && agentRunMatch) {
         const token = requestToken(request, url);
         const body = await readJson(request);
@@ -494,14 +494,14 @@ export async function createPassOnServer(options = {}) {
         return;
       }
 
-      const passonMatch = url.pathname.match(/^\/v1\/passons\/([0-9a-f-]{36})$/i);
-      if (request.method === "GET" && passonMatch) {
-        const record = assertReadable(await store.get(passonMatch[1]), requestToken(request, url));
+      const relayMatch = url.pathname.match(/^\/v1\/relays\/([0-9a-f-]{36})$/i);
+      if (request.method === "GET" && relayMatch) {
+        const record = assertReadable(await store.get(relayMatch[1]), requestToken(request, url));
         sendJson(response, 200, publicRecord(record));
         return;
       }
 
-      const renderMatch = url.pathname.match(/^\/v1\/passons\/([0-9a-f-]{36})\/render$/i);
+      const renderMatch = url.pathname.match(/^\/v1\/relays\/([0-9a-f-]{36})\/render$/i);
       if (request.method === "GET" && renderMatch) {
         const record = assertReadable(await store.get(renderMatch[1]), requestToken(request, url));
         const target = url.searchParams.get("target") ?? "generic";
@@ -514,7 +514,7 @@ export async function createPassOnServer(options = {}) {
         return;
       }
 
-      const acceptMatch = url.pathname.match(/^\/v1\/passons\/([0-9a-f-]{36})\/accept$/i);
+      const acceptMatch = url.pathname.match(/^\/v1\/relays\/([0-9a-f-]{36})\/accept$/i);
       if (request.method === "POST" && acceptMatch) {
         const token = requestToken(request, url);
         const body = await readJson(request);
@@ -525,7 +525,7 @@ export async function createPassOnServer(options = {}) {
           return { ...record, status: "accepted", receipts: [...record.receipts, receipt] };
         });
         if (!updated) {
-          const error = new Error("Pass-on not found.");
+          const error = new Error("Relay not found.");
           error.code = "NOT_FOUND";
           throw error;
         }
@@ -548,7 +548,7 @@ export async function createPassOnServer(options = {}) {
 async function main() {
   const host = process.env.HOST ?? "127.0.0.1";
   const port = Number(process.env.PORT ?? 4317);
-  const server = await createPassOnServer();
+  const server = await createRelayServer();
   server.listen(port, host, () => {
     console.log(`Relay listening at http://${host}:${port}`);
     if (host === "0.0.0.0") console.log("Warning: auth is not implemented. Put Relay behind a trusted gateway.");

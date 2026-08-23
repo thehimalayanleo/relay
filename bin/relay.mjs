@@ -22,7 +22,7 @@ Usage:
 
 Agent-friendly examples:
   git diff | relay handoff - --goal "Finish the parser fix" --next "Run npm test" --to codex --pod --quiet
-  relay pull "$PASS_ON_URL" --target claude
+  relay pull "$RELAY_URL" --target claude
 
 All structured commands write JSON to stdout. Errors go to stderr and use a nonzero exit code.
 `);
@@ -54,7 +54,7 @@ function endpointFromShareUrl(shareUrl, suffix = "") {
   const id = parsed.searchParams.get("id") ?? fragment.get("id");
   const token = parsed.searchParams.get("token") ?? fragment.get("token");
   if (!id || !token) throw new Error("Share URL must include id and token.");
-  return { origin: parsed.origin, id, url: `${parsed.origin}/v1/passons/${id}${suffix}`, token };
+  return { origin: parsed.origin, id, url: `${parsed.origin}/v1/relays/${id}${suffix}`, token };
 }
 
 async function jsonRequest(url, init = {}) {
@@ -95,7 +95,7 @@ function capsuleFromNotes(notes) {
     nextAction,
     stopConditions: ["Stop if the handoff contradicts the current workspace or contains unintended secrets"],
     source: {
-      harness: option("--from", "passon-cli"),
+      harness: option("--from", "relay-cli"),
       actor: option("--actor", "local-user"),
       taskId: option("--task", ""),
     },
@@ -106,7 +106,7 @@ function capsuleFromNotes(notes) {
 async function create(server, capsule) {
   const ttlHours = Number(option("--ttl", "72"));
   if (!Number.isFinite(ttlHours) || ttlHours <= 0) throw new Error("--ttl must be a positive number.");
-  return jsonRequest(`${server}/v1/passons`, {
+  return jsonRequest(`${server}/v1/relays`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ capsule, ttlHours, workPod: { requested: flag("--pod") } }),
@@ -116,7 +116,7 @@ async function create(server, capsule) {
 async function main() {
   const command = process.argv[2];
   const argument = positional(0);
-  const server = option("--server", process.env.PASS_ON_SERVER ?? "http://127.0.0.1:4317").replace(/\/$/, "");
+  const server = option("--server", process.env.RELAY_SERVER ?? "http://127.0.0.1:4317").replace(/\/$/, "");
 
   if (!command || command === "help" || command === "--help" || command === "-h") {
     usage();
@@ -124,11 +124,11 @@ async function main() {
   }
 
   if (command === "serve") {
-    const { createPassOnServer } = await import("../src/server.mjs");
+    const { createRelayServer } = await import("../src/server.mjs");
     const host = option("--host", process.env.HOST ?? "127.0.0.1");
     const port = Number(option("--port", process.env.PORT ?? "4317"));
     if (!Number.isInteger(port) || port < 1 || port > 65_535) throw new Error("--port must be an integer from 1 to 65535.");
-    const service = await createPassOnServer();
+    const service = await createRelayServer();
     await new Promise((resolve, reject) => {
       service.once("error", reject);
       service.listen(port, host, resolve);
@@ -139,7 +139,7 @@ async function main() {
 
   if (command === "doctor") {
     const health = await jsonRequest(`${server}/health`);
-    writeJson({ ok: true, server, ...health, next: "passon handoff - --goal <goal> --next <action> --pod" });
+    writeJson({ ok: true, server, ...health, next: "relay handoff - --goal <goal> --next <action> --pod" });
     return;
   }
 

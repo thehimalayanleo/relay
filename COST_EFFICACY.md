@@ -1,6 +1,6 @@
 # Cost efficacy
 
-PassOn has two possible economic benefits:
+Relay has two possible economic benefits:
 
 1. Lower input cost because a receiving model loads a compact checkpoint instead of a long transcript.
 2. Less repeated work because more resumes preserve the correct objective, constraints, and verified state.
@@ -11,7 +11,7 @@ The second effect dominates in every included scenario. This means the product s
 
 These figures are assumptions produced by `npm run cost`. They are not empirical product results.
 
-| Scenario | Pass-ons / month | Raw to capsule tokens | Assumed resume failures | Token savings / month | Recovery savings / month | Net savings / month | Build-cost payback |
+| Scenario | Relays / month | Raw to capsule tokens | Assumed resume failures | Token savings / month | Recovery savings / month | Net savings / month | Build-cost payback |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | Conservative | 500 | 50k to 10k | 10% to 8% | $40 | $188 | $203 | 98.8 months |
 | Base | 2,000 | 100k to 12k | 18% to 8% | $528 | $10,000 | $10,478 | 2.9 months |
@@ -22,9 +22,9 @@ The conservative case is not attractive. The base and high-volume cases are attr
 ## Formulas
 
 ```text
-token_savings = passons * (raw_tokens - capsule_tokens) * input_price_per_token
+token_savings = relays * (raw_tokens - capsule_tokens) * input_price_per_token
 
-avoided_failures = passons * (baseline_failure_rate - passon_failure_rate)
+avoided_failures = relays * (baseline_failure_rate - relay_failure_rate)
 
 recovery_savings = avoided_failures * recovery_hours * loaded_labor_cost
 
@@ -48,6 +48,6 @@ Before claiming positive ROI, run at least 20 matched interrupted tasks per cond
 - Fresh start
 - Raw transcript
 - Naive structured summary
-- PassOn capsule
+- Relay capsule
 
 Measure final task success, time to first correct action, repeated actions, false inherited claims, duplicate side effects, and total tokens. Use `scripts/evaluate.mjs` to summarize the observations. Replace the model's failure-rate assumptions with measured confidence intervals.

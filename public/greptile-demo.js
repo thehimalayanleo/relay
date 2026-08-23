@@ -215,7 +215,7 @@ byId("agent").addEventListener("click", async () => {
   try {
     const capability = new URL(transfer.shareUrl);
     const params = new URLSearchParams(capability.hash.slice(1));
-    const result = await json(await fetch(`/v1/passons/${params.get("id")}/agent/run`, {
+    const result = await json(await fetch(`/v1/relays/${params.get("id")}/agent/run`, {
       method: "POST",
       headers: { authorization: `Bearer ${params.get("token")}`, "content-type": "application/json" },
       body: JSON.stringify({ target: "generic", demo: true }),
@@ -236,8 +236,8 @@ byId("resume").addEventListener("click", async () => {
     const capability = new URL(transfer.shareUrl);
     const params = new URLSearchParams(capability.hash.slice(1));
     const headers = { authorization: `Bearer ${params.get("token")}` };
-    const pod = await json(await fetch(`/v1/passons/${params.get("id")}/pod`, { headers }));
-    await json(await fetch(`/v1/passons/${params.get("id")}/accept`, {
+    const pod = await json(await fetch(`/v1/relays/${params.get("id")}/pod`, { headers }));
+    await json(await fetch(`/v1/relays/${params.get("id")}/accept`, {
       method: "POST", headers: { ...headers, "content-type": "application/json" },
       body: JSON.stringify({ actor: "agent-2", harness: "ox-alpha", restatedGoal: "Resume the ARC compatibility episode without rediscovery.", firstAction: scenario.investigation.nextAction, observedDigest: transfer.digest }),
     }));

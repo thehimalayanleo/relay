@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 
-export const SCHEMA_VERSION = "passon/v1";
+export const SCHEMA_VERSION = "relay/v1";
 
 const SECRET_RULES = [
   ["private key", /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/i],
@@ -174,7 +174,7 @@ export function publicRecord(record) {
 
 export function assertReadable(record, token, now = new Date()) {
   if (!record) {
-    const error = new Error("Pass-on not found.");
+    const error = new Error("Relay not found.");
     error.code = "NOT_FOUND";
     throw error;
   }
@@ -184,7 +184,7 @@ export function assertReadable(record, token, now = new Date()) {
     throw error;
   }
   if (new Date(record.expiresAt).getTime() <= now.getTime()) {
-    const error = new Error("This pass-on has expired.");
+    const error = new Error("This relay has expired.");
     error.code = "EXPIRED";
     throw error;
   }
