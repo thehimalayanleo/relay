@@ -89,6 +89,16 @@ function requestToken(request, url) {
   return url.searchParams.get("token") ?? "";
 }
 
+function requireHostAuthority(request, expected = "") {
+  if (!expected) return;
+  const authorization = request.headers.authorization ?? "";
+  if (authorization !== `Bearer ${expected}`) {
+    const error = new Error("This operation requires the Relay host token.");
+    error.code = "FORBIDDEN";
+    throw error;
+  }
+}
+
 function externalOrigin(request, url) {
   const protocol = request.headers["x-forwarded-proto"] ?? url.protocol.replace(":", "");
   const host = request.headers["x-forwarded-host"] ?? request.headers.host;
@@ -188,6 +198,8 @@ export async function createRelayServer(options = {}) {
   const strongModel = options.strongModel ?? process.env.RELAY_STRONG_MODEL ?? "opencode-go/deepseek-v4-pro";
   const escalationEnabled = options.escalationEnabled ?? process.env.RELAY_ESCALATION_ENABLED !== "false";
   const escalationStepBudget = Number(options.escalationStepBudget ?? process.env.RELAY_ESCALATION_STEP_BUDGET ?? 10);
+  const configuredHostToken = options.hostToken ?? process.env.RELAY_HOST_TOKEN ?? "";
+  const hostedOnSail = options.hostedOnSail ?? process.env.RELAY_HOSTED_ON_SAIL === "true";
   const sessionStore = options.sessionStore ?? new SessionFileStore(path.join(
     options.dataDir ?? process.env.RELAY_DATA_DIR ?? path.join(projectRoot, ".data"),
     "sessions",
@@ -222,6 +234,9 @@ export async function createRelayServer(options = {}) {
     }
 
     try {
+      if ((request.method === "POST" && ["/v1/sessions", "/v1/relays"].includes(url.pathname)) || url.pathname.startsWith("/v1/integrations/")) {
+        requireHostAuthority(request, configuredHostToken);
+      }
       if (["GET", "HEAD"].includes(request.method) && staticFiles.has(url.pathname)) {
         const [file, contentType] = staticFiles.get(url.pathname);
         const body = await readFile(path.join(publicRoot, file));
@@ -234,6 +249,7 @@ export async function createRelayServer(options = {}) {
         sendJson(response, 200, {
           ok: true,
           protocol: "relay/v1",
+          hostAccessProtected: Boolean(configuredHostToken),
           workPod: workPodProvider.status(),
           autonomousAgent: agentRunner.status(),
           hostIntegrations: hostStatus({ workPodProvider, greptileClient, claudeMem, agentRunner }),
@@ -269,7 +285,7 @@ export async function createRelayServer(options = {}) {
       if (request.method === "POST" && url.pathname === "/v1/sessions") {
         const body = await readJson(request);
         const created = await sessions.create(body);
-        const hostOrigin = externalOrigin(request, url);
+        const hostOrigin = hostedOnSail && advertisedOrigin ? advertisedOrigin : externalOrigin(request, url);
         const inviteOrigin = advertisedOrigin || hostOrigin;
         const links = sessionLinks({
           id: created.record.id, token: created.token, hostOrigin, inviteOrigin,
@@ -291,7 +307,7 @@ export async function createRelayServer(options = {}) {
         sessionRateLimiter.check(sessionMatch[1]);
         const token = requestToken(request, url);
         const session = await sessions.get(sessionMatch[1], token);
-        const hostOrigin = externalOrigin(request, url);
+        const hostOrigin = hostedOnSail && advertisedOrigin ? advertisedOrigin : externalOrigin(request, url);
         const inviteOrigin = advertisedOrigin || hostOrigin;
         const links = sessionLinks({ id: session.id, token, hostOrigin, inviteOrigin });
         sendJson(response, 200, {

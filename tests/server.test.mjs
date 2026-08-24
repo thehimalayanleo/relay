@@ -113,6 +113,26 @@ test("cost endpoint returns transparent assumptions", async () => {
   });
 });
 
+test("Sail-hosted mode protects session creation with a host token", async () => {
+  await withServer(async (origin) => {
+    const denied = await fetch(`${origin}/v1/sessions`, {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ title: "Denied" }),
+    });
+    assert.equal(denied.status, 403);
+    const allowed = await fetch(`${origin}/v1/sessions`, {
+      method: "POST",
+      headers: { authorization: "Bearer host-control", "content-type": "application/json" },
+      body: JSON.stringify({ title: "Hosted session" }),
+    });
+    assert.equal(allowed.status, 201);
+    const created = await allowed.json();
+    assert.match(created.hostWorkspaceUrl, /^https:\/\/relay\.sail\.example/);
+    assert.match(created.collaboratorInviteUrl, /^https:\/\/relay\.sail\.example/);
+    const health = await (await fetch(`${origin}/health`)).json();
+    assert.equal(health.hostAccessProtected, true);
+  }, { hostToken: "host-control", hostedOnSail: true, publicUrl: "https://relay.sail.example" });
+});
+
 test("JavaScript client transfers and pulls the same capsule across harness renderers", async () => {
   await withServer(async (origin) => {
     const client = new RelayClient(origin);

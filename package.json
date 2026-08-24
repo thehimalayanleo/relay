@@ -21,7 +21,8 @@
     "README.md",
     "ARCHITECTURE.md",
     "PROTOCOL.md",
-    "COST_EFFICACY.md"
+    "COST_EFFICACY.md",
+    "Dockerfile.sail"
   ],
   "repository": {
     "type": "git",

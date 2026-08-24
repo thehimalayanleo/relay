@@ -13,6 +13,7 @@ export function sessionLinks({ id, token, hostOrigin, inviteOrigin, creatorRole 
     hostWorkspaceUrl: `${publicOrigin(hostOrigin)}/demo/greptile#${fragment}&role=${creatorRole === "pm" ? "pm" : "swe"}`,
     pmInviteUrl: `${publicOrigin(inviteOrigin || hostOrigin)}/demo/greptile#${fragment}&role=pm`,
     collaboratorInviteUrl: `${publicOrigin(inviteOrigin || hostOrigin)}/demo/greptile#${fragment}&role=collaborator`,
+    agentUrl: `${publicOrigin(inviteOrigin || hostOrigin)}/demo/greptile#${fragment}&role=agent`,
   };
 }
 

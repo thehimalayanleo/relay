@@ -36,6 +36,7 @@ test("public URL controls the collaborator invite without changing the host URL"
   assert.equal(links.hostWorkspaceUrl, "http://127.0.0.1:4317/demo/greptile#session=12345678-1234-1234-1234-123456789abc&token=capability-test&role=swe");
   assert.equal(links.pmInviteUrl, "http://ajinkya-tail:4317/demo/greptile#session=12345678-1234-1234-1234-123456789abc&token=capability-test&role=pm");
   assert.equal(links.collaboratorInviteUrl, "http://ajinkya-tail:4317/demo/greptile#session=12345678-1234-1234-1234-123456789abc&token=capability-test&role=collaborator");
+  assert.equal(links.agentUrl, "http://ajinkya-tail:4317/demo/greptile#session=12345678-1234-1234-1234-123456789abc&token=capability-test&role=agent");
 });
 
 test("browser bundle contains no provider credentials or provider API authorization", async () => {

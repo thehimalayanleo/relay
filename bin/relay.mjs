@@ -14,6 +14,7 @@ Portable human-agent handoffs for shells and agent harnesses.
 Usage:
   relay serve [--host HOST] [--port PORT] [--public-url URL]
   relay configure
+  relay sail deploy --title TEXT [--repo OWNER/REPO --pr NUMBER] [--port 4319] [--with-provider-keys]
   relay session create --title TEXT --repo OWNER/REPO --pr NUMBER [--server URL]
   relay arc run --repo-path PATH [--builder-burst 10] [--cycles 1] [--server URL]
   relay doctor [--server URL]
@@ -223,6 +224,42 @@ async function main() {
 
   if (command === "configure") {
     await configure();
+    return;
+  }
+
+  if (command === "sail" && process.argv[3] === "deploy") {
+    await loadSavedConfig();
+    const title = option("--title", "Relay shared agent workspace");
+    const repo = option("--repo", "Local workspace");
+    const prValue = option("--pr");
+    const prNumber = prValue ? Number(prValue) : null;
+    if (prValue && (!Number.isInteger(prNumber) || prNumber <= 0)) throw new Error("--pr must be a positive number.");
+    if (repo !== "Local workspace" && !repo.includes("/")) throw new Error("--repo must be OWNER/REPO.");
+    const { deploySailHost, createHostedSession } = await import("../src/sail-host.mjs");
+    console.error("Building Relay in Sail and waiting for HTTPS ingress...");
+    const deployment = await deploySailHost({
+      port: Number(option("--port", "4319")),
+      name: option("--name", ""),
+      providerKeys: flag("--with-provider-keys"),
+    });
+    const created = await createHostedSession(deployment, {
+      title,
+      creatorRole: "swe",
+      repository: repo === "Local workspace"
+        ? { name: repo, remote: "local", defaultBranch: "", branch: "", prNumber: null }
+        : { name: repo, remote: "github", defaultBranch: option("--default-branch", "main"), prNumber },
+    });
+    const deploymentPath = path.join(path.dirname(configPath), "sail-host.json");
+    await mkdir(path.dirname(deploymentPath), { recursive: true, mode: 0o700 });
+    await writeFile(deploymentPath, `${JSON.stringify({ sailboxId: deployment.sailboxId, publicUrl: deployment.publicUrl, hostToken: deployment.hostToken, createdAt: new Date().toISOString() }, null, 2)}\n`, { mode: 0o600 });
+    await chmod(deploymentPath, 0o600);
+    console.log("Relay Sail host ready");
+    console.log(`Ajinkya: ${created.hostWorkspaceUrl}`);
+    console.log(`Sanjana: ${created.collaboratorInviteUrl ?? created.pmInviteUrl}`);
+    console.log(`Agent:   ${created.agentUrl}`);
+    console.log(`Sailbox: ${deployment.sailboxId}`);
+    console.log(`Expires: ${created.expiresAt}`);
+    console.log(`Saved host control metadata to ${deploymentPath} with mode 0600.`);
     return;
   }
 

@@ -152,6 +152,20 @@ Run `relay configure` once on the host. It prompts silently for Sail and Greptil
 
 Two collaborators must point at the same Relay server. Two independent localhost servers do not share a session.
 
+### Host Relay itself in Sail
+
+To move the live collaboration server off the Mac and give both collaborators durable HTTPS links:
+
+```bash
+relay sail deploy --title "Build the ARC-AGI-3 harness" --repo thehimalayanleo/savepoint-demo --pr 1
+```
+
+Relay builds a private Sailbox image, starts the server on port `4319`, exposes it through Sail HTTP ingress, creates one session, and prints separate `Ajinkya`, `Sanjana`, and `Agent` links. All three URLs share the same session capability and differ only by role. The command stores the Sailbox ID and host-control token in `~/.config/relay/sail-host.json` with mode `0600`.
+
+The deployed server protects session creation and host-global integration endpoints with that host token. Session reads, writes, SSE, checkpoints, Greptile operations, and agent runs still require the one-session capability. Provider secrets stay inside the Sailbox process and are never returned to either browser.
+
+By default, no provider key or OpenCode credential leaves the host. Add `--with-provider-keys` only when you explicitly intend to copy the host's Greptile key and OpenCode credential into the private Sailbox. The OpenCode credential is written with mode `0600`. The Sail-hosted checkpoint provider uses the Sailbox's own persistent disk rather than creating a nested Sailbox for every checkpoint.
+
 Relay is designed for trusted LAN or Tailscale use at this stage. Capability links are bearer authority. Do not expose the service directly to the public internet without an authenticated gateway and TLS.
 
 ```bash
