@@ -255,3 +255,58 @@ test("session queue performs one bounded strong-model retry with Greptile eviden
     assert.equal(session.activity.filter((event) => event.type === "agent-escalation").length, 2);
   }, { agentRunner: fakeRunner, greptileClient: fakeGreptile, fastModel: "fast-test", strongModel: "strong-test" });
 });
+
+test("post-run persistence failure emits a terminal agent event", async () => {
+  const fakeRunner = {
+    status: () => ({ configured: true, harness: "test", transport: "process" }),
+    run: async () => ({
+      id: "completed-before-persistence",
+      harness: "test",
+      startedAt: new Date().toISOString(),
+      completedAt: new Date().toISOString(),
+      durationMs: 1,
+      exitCode: 0,
+      stdout: "finished",
+      stderr: "",
+    }),
+  };
+  const workPodProvider = {
+    init: async () => {},
+    status: () => ({ provider: "test", configured: true }),
+    create: async ({ id }) => ({ provider: "test", id, state: "ready" }),
+    storeAgentResult: async () => { throw new Error("checkpoint storage unavailable"); },
+    terminate: async () => {},
+  };
+  await withServer(async (origin) => {
+    const created = await (await fetch(`${origin}/v1/sessions`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ title: "Persistence failure" }),
+    })).json();
+    const headers = { authorization: `Bearer ${created.token}`, "content-type": "application/json" };
+    await fetch(`${origin}/v1/sessions/${created.id}/checkpoints`, {
+      method: "POST", headers, body: JSON.stringify({ actor: "Ajinkya" }),
+    });
+    const failed = await fetch(`${origin}/v1/sessions/${created.id}/agent/run`, {
+      method: "POST", headers, body: JSON.stringify({ requestedBy: "Ajinkya", target: "generic" }),
+    });
+    assert.equal(failed.status, 500);
+    const session = await (await fetch(`${origin}/v1/sessions/${created.id}`, { headers })).json();
+    assert.equal(session.activity.at(-1).type, "agent-failed");
+    assert.match(session.activity.at(-1).detail, /checkpoint storage unavailable/);
+  }, { agentRunner: fakeRunner, workPodProvider });
+});
+
+test("local session checkpoints do not invent a GitHub repository URL", async () => {
+  await withServer(async (origin) => {
+    const created = await (await fetch(`${origin}/v1/sessions`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ title: "Local-only work" }),
+    })).json();
+    const headers = { authorization: `Bearer ${created.token}`, "content-type": "application/json" };
+    const checkpoint = await (await fetch(`${origin}/v1/sessions/${created.id}/checkpoints`, {
+      method: "POST", headers, body: JSON.stringify({ actor: "Ajinkya" }),
+    })).json();
+    const record = await (await fetch(`${origin}/v1/relays/${checkpoint.id}`, { headers })).json();
+    assert.equal(record.capsule.artifacts.some((artifact) => artifact.uri.includes("github.com/Local")), false);
+  });
+});

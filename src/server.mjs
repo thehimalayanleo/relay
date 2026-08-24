@@ -62,6 +62,7 @@ function sendError(response, error) {
     GREPTILE_MCP_ERROR: 502,
     GREPTILE_TOOL_ERROR: 502,
     CLAUDE_MEM_UNAVAILABLE: 503,
+    AGENT_EXECUTION_FAILED: 500,
     RATE_LIMITED: 429,
   };
   sendJson(response, statusByCode[error.code] ?? 400, {
@@ -168,7 +169,9 @@ function checkpointCapsule(session) {
     decisions: [],
     constraints: [session.brief.constraint].filter(Boolean),
     artifacts: [
-      { label: "Session repository", uri: `https://github.com/${session.repository.name}`, status: "verified" },
+      ...(session.repository.remote === "github" && session.repository.name.includes("/")
+        ? [{ label: "Session repository", uri: `https://github.com/${session.repository.name}`, status: "verified" }]
+        : []),
       ...Object.values(session.greptile.findings).filter((item) => item.url).map((item) => ({ label: `Greptile ${item.id}`, uri: item.url, status: "verified" })),
     ],
     memories: session.claudeMem.observationIds.map((id) => ({
@@ -486,6 +489,7 @@ export async function createRelayServer(options = {}) {
         }, async (queueJob) => {
           await sessions.addActivity(session.id, token, { type: "agent-running", actor: requestedBy, detail: `working in ${target} through the shared Sailbox · fast model` });
           await sessions.addActivity(session.id, token, { type: "agent-progress", actor: requestedBy, detail: "Thinking: OpenCode model step requested" });
+          try {
           let lastProgressAt = 0, progressBuffer = "", progressCount = 0, modelStepCount = 0, lastProgressDetail = "";
           let progressWrites = Promise.resolve();
           let result;
@@ -513,8 +517,6 @@ export async function createRelayServer(options = {}) {
               },
             });
           } catch (error) {
-            await progressWrites;
-            await sessions.addActivity(session.id, token, { type: "agent-failed", actor: requestedBy, detail: `host runner failed: ${redactAgentProgress(error.message)}` });
             throw error;
           }
           if (progressBuffer.trim() && progressCount < 80) {
@@ -591,6 +593,17 @@ export async function createRelayServer(options = {}) {
             ] : [{ model: fastModel, exitCode: result.exitCode, timedOut: Boolean(result.timedOut), response: exactAgentResponse(result.stdout) }],
           });
           return { status: result.exitCode === 0 ? "agent-completed" : "agent-failed", result, queueJob };
+          } catch (error) {
+            await sessions.addActivity(session.id, token, {
+              type: "agent-failed",
+              actor: requestedBy,
+              detail: `host execution failed: ${redactAgentProgress(error.message)}`,
+            }).catch(() => {});
+            if (error.code) throw error;
+            const failure = new Error(`Host agent execution failed: ${redactAgentProgress(error.message)}`);
+            failure.code = "AGENT_EXECUTION_FAILED";
+            throw failure;
+          }
         });
         sendJson(response, 201, { ...output, queue: agentQueue.status(session.id) });
         return;
