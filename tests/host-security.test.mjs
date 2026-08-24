@@ -66,13 +66,17 @@ test("browser renders the host integration trace", async () => {
   assert.match(page, /JetBrains\+Mono/);
   assert.match(page, /id="repo-connection"/);
   assert.match(page, /id="greptile-stage"/);
+  assert.match(page, /id="greptile-panel"/);
   assert.match(page, /Findings ↑/);
   assert.match(page, /Review iteration →/);
   assert.match(page, /id="preview-session" target="_blank"/);
   assert.match(browser, /renderRepository/);
+  assert.match(browser, /formatAgentText/);
   assert.doesNotMatch(browser, /window\.open\(/);
   assert.match(page, /Start shared session/);
   assert.match(browser, /Connect later/);
+  assert.match(browser, /event\.key !== "Enter" \|\| event\.shiftKey/);
+  assert.match(page, /Enter to send · Shift Enter for a new line/);
   assert.doesNotMatch(page, /Use selected workspace/);
   assert.doesNotMatch(browser, /GitHub workspace search is unavailable/);
   assert.match(browser, /location\.assign\(created\.creatorUrl\)/);

@@ -9,6 +9,16 @@ let greptileUiStage = null;
 const syncedSessions = new Set();
 
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[c]));
+const compactTraceText = (value) => String(value ?? "").replace(/\*\*/g, "").replace(/\s+/g, " ").trim();
+function formatAgentText(value) {
+  return esc(value).split("\n").map((line) => {
+    if (!line.trim()) return '<span class="response-gap"></span>';
+    const bold = line.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+    return line.startsWith("- ")
+      ? `<span class="response-line response-bullet"><i>•</i><span>${bold.slice(2)}</span></span>`
+      : `<span class="response-line">${bold}</span>`;
+  }).join("");
+}
 const cleanLabel = (value) => String(value ?? "Agent").replace(/^\*\*|\*\*$/g, "").replace(/^\\+|\\+$/g, "").trim();
 async function json(response) { const body = await response.json(); if (!response.ok) throw new Error(body.message ?? body.error ?? `HTTP ${response.status}`); return body; }
 const authHeaders = (extra = {}) => ({ authorization: `Bearer ${active.token}`, ...extra });
@@ -43,6 +53,9 @@ async function syncGreptile(attempts = 1) {
 function renderRepository() {
   if (!snapshot) return;
   const repository = snapshot.repository ?? {};
+  const github = repository.remote === "github";
+  byId("repo-mark").textContent = github ? "GH" : "LOCAL";
+  byId("repo-label").textContent = github ? "Connected repository" : "Workspace";
   byId("repo-connection").textContent = repository.remote === "github"
     ? `${repository.name}${repository.prNumber ? ` / pull ${repository.prNumber}` : ""}`
     : repository.name || "Local workspace";
@@ -90,7 +103,7 @@ function renderFeed() {
       const participant = cleanLabel(run.requestedBy);
       const inherited = `Problem: ${run.inheritedContext.problem}\nConstraint: ${run.inheritedContext.constraint}\nNext: ${run.inheritedContext.nextAction}`;
       const escalation = run.escalation ? `<span class="inherited">Escalated once · ${esc(run.escalation.greptileEvidence.length)} Greptile finding${run.escalation.greptileEvidence.length === 1 ? "" : "s"} · checkpoint preserved</span>` : "";
-      return { at: run.completedAt, html: `<article class="event"><div class="avatar">${esc(participant[0])}</div><div class="bubble"><strong>${esc(participant)}</strong><time>${new Date(run.completedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time><span class="inherited">Completed through the serialized host queue</span>${escalation}<div class="agent-response">${esc(run.response)}</div><details class="run-context"><summary>Inherited context</summary><div class="agent-response">${esc(inherited)}</div></details></div></article>` };
+      return { at: run.completedAt, html: `<article class="event"><div class="avatar">${esc(participant[0])}</div><div class="bubble"><strong>${esc(participant)}</strong><time>${new Date(run.completedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time><span class="inherited">Completed through the serialized host queue</span>${escalation}<div class="agent-response formatted">${formatAgentText(run.response)}</div><details class="run-context"><summary>Inherited context</summary><div class="agent-response">${esc(inherited)}</div></details></div></article>` };
     }),
   ].sort((a, b) => new Date(a.at) - new Date(b.at));
   if (timeline.length || liveHtml) { byId("feed").innerHTML = timeline.map((item) => item.html).join("") + liveHtml; return; }
@@ -101,7 +114,7 @@ function renderFeed() {
 function renderTrace() {
   const service = (event) => event.type === "checkpoint" ? "Sail" : event.type === "greptile" ? "Greptile" : event.type.startsWith("agent") ? "OpenCode" : "Relay";
   const relevant = (snapshot.activity ?? []).filter((event) => ["checkpoint", "greptile", "agent-queued", "agent-running", "agent-progress", "agent-escalation", "agent-failed", "agent"].includes(event.type)).slice(-30);
-  const rows = relevant.map((event) => `<div class="trace-row ${["agent-running", "agent-progress"].includes(event.type) ? "live" : ""}"><time>${new Date(event.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</time><b>${service(event)}</b><span>${esc(event.detail)}</span></div>`);
+  const rows = relevant.map((event) => `<div class="trace-row ${["agent-running", "agent-progress"].includes(event.type) ? "live" : ""}"><time>${new Date(event.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</time><b>${service(event)}</b><span>${esc(compactTraceText(event.detail))}</span></div>`);
   if (liveAgentEvent()) rows.push('<div class="trace-row live"><time>live</time><b>OpenCode</b><span id="trace-heartbeat">Model connected · waiting for the next thinking, tool, or text event</span></div>');
   if (snapshot.claudeMem?.lastRecallAt) rows.push(`<div class="trace-row"><time>${new Date(snapshot.claudeMem.lastRecallAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</time><b>Claude-Mem</b><span>${snapshot.claudeMem.observationIds.length} memory references supplied</span></div>`);
   byId("live-trace").innerHTML = rows.length ? rows.join("") : '<div class="trace-row"><time>now</time><b>Relay</b><span>Waiting for host work</span></div>';
@@ -131,7 +144,9 @@ function renderGreptile() {
 function render(next) {
   snapshot = { ...next, links: next.links ?? snapshot?.links, hostIntegrations: next.hostIntegrations ?? snapshot?.hostIntegrations };
   byId("session-title-view").textContent = snapshot.title;
-  byId("session-subtitle").textContent = `${snapshot.repository.name}${snapshot.repository.prNumber ? ` · PR #${snapshot.repository.prNumber}` : " · new repository"} · v${snapshot.version}`;
+  byId("session-subtitle").textContent = snapshot.repository.remote === "github"
+    ? `${snapshot.repository.name}${snapshot.repository.prNumber ? ` · PR #${snapshot.repository.prNumber}` : " · no pull request"} · v${snapshot.version}`
+    : `Local session · GitHub optional · v${snapshot.version}`;
   byId("presence").innerHTML = snapshot.participants.map((p) => `<div class="avatar" style="background:${esc(p.color)}" title="${esc(p.name)} · ${esc(p.role)}">${esc(p.name[0])}</div>`).join("");
   if (!byId("composer").dataset.ready) { byId("composer").value = ""; byId("composer").dataset.ready = "true"; }
   const runs = snapshot.agentRuns ?? [];
@@ -144,6 +159,8 @@ function render(next) {
   byId("preview-session").href = snapshot.links?.collaboratorInviteUrl ?? snapshot.links?.pmInviteUrl ?? "#";
   const greptileSamples = snapshot.greptile?.samples ?? [];
   const latestGreptile = snapshot.greptile?.samples?.at(-1) ?? { closed: 0, remaining: 0 };
+  byId("greptile-panel").hidden = !snapshot.repository.prNumber;
+  byId("greptile-pill").hidden = !snapshot.repository.prNumber;
   byId("greptile-pill").textContent = !snapshot.repository.prNumber
     ? "Greptile · waiting for PR"
     : greptileSamples.length && latestGreptile.opened === 0
@@ -174,9 +191,9 @@ async function updateField(field, value) {
   if (!active) return;
   render(await json(await fetch(`/v1/sessions/${active.id}/brief`, { method: "POST", headers: authHeaders({ "content-type": "application/json" }), body: JSON.stringify({ ...person(), actor: person().name, actorId: person().id, field, value }) })));
 }
-byId("send").onclick = async () => {
+async function submitMessage() {
   const value = byId("composer").value.trim();
-  if (!value) return;
+  if (!value || byId("send").disabled) return;
   byId("send").disabled = true;
   try {
     await updateField("implementation", value);
@@ -196,6 +213,12 @@ byId("send").onclick = async () => {
       .then(json).then(() => { status("Host agent completed. Full response preserved above."); syncGreptile(3).catch(() => {}); }).catch((error) => status(`Agent failed: ${error.message}`));
   } catch (error) { status(error.message); }
   finally { byId("send").disabled = false; }
+}
+byId("send").onclick = submitMessage;
+byId("composer").onkeydown = (event) => {
+  if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+  event.preventDefault();
+  submitMessage();
 };
 
 async function recallMemory() {
