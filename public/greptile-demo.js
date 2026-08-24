@@ -84,7 +84,13 @@ function renderGreptile() {
   const latest = samples.at(-1) ?? { closed: 0, remaining: 0 };
   byId("greptile-addressed").textContent = latest.closed ?? 0;
   byId("greptile-open").textContent = latest.remaining ?? 0;
-  byId("greptile-note").textContent = !snapshot.repository.prNumber ? "No pull request linked" : samples.length ? `Review ${latest.iteration}` : "Waiting for first review";
+  byId("greptile-note").textContent = !snapshot.repository.prNumber
+    ? "No pull request linked"
+    : samples.length
+      ? latest.opened === 0
+        ? `Review ${latest.iteration} · passed`
+        : `Review ${latest.iteration}`
+      : "Waiting for first review";
   const max = Math.max(1, ...samples.flatMap((sample) => [sample.closed, sample.remaining]));
   byId("greptile-spark").innerHTML = samples.length ? samples.map((sample) => `<span class="spark-sample" title="${sample.closed} addressed, ${sample.remaining} open"><i style="height:${Math.max(2, sample.closed / max * 100)}%"></i><i class="open" style="height:${Math.max(2, sample.remaining / max * 100)}%"></i></span>`).join("") : '<span style="color:#666;font-size:10px;padding-bottom:7px">No Greptile samples yet</span>';
   const findings = Object.values(snapshot.greptile?.findings ?? {});
@@ -104,8 +110,13 @@ function render(next) {
   byId("coordination-detail").textContent = liveAgent ? "Live host execution · next role waits in queue" : latestRun ? "Latest shared-stack continuation, preserved word for word" : `${snapshot.checkpoints.length} checkpoint${snapshot.checkpoints.length === 1 ? "" : "s"} · ready on host`;
   byId("host-mode").textContent = active.role === "agent" ? "Standalone agent mode" : ["pm", "collaborator"].includes(active.role) ? "Connected as Sanjana · SWE" : "Host integrations ready";
   byId("host-help").textContent = active.role === "agent" ? "Runs without either browser open" : ["pm", "collaborator"].includes(active.role) ? "No local keys required" : "Powered by host integrations";
+  const greptileSamples = snapshot.greptile?.samples ?? [];
   const latestGreptile = snapshot.greptile?.samples?.at(-1) ?? { closed: 0, remaining: 0 };
-  byId("greptile-pill").textContent = snapshot.repository.prNumber ? `Greptile · ${latestGreptile.closed} addressed · ${latestGreptile.remaining} open` : "Greptile · waiting for PR";
+  byId("greptile-pill").textContent = !snapshot.repository.prNumber
+    ? "Greptile · waiting for PR"
+    : greptileSamples.length && latestGreptile.opened === 0
+      ? "Greptile · review passed"
+      : `Greptile · ${latestGreptile.closed} addressed · ${latestGreptile.remaining} open`;
   document.querySelector(".conversation").classList.toggle("has-content", Boolean((snapshot.activity ?? []).length || (snapshot.agentRuns ?? []).length));
   renderFeed(); renderTrace(); renderGreptile(); remember();
   clearTimeout(memoryTimer); memoryTimer = setTimeout(recallMemory, 900);
