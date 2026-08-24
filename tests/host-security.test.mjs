@@ -63,4 +63,8 @@ test("browser renders the host integration trace", async () => {
   ]);
   assert.match(browser, /renderTrace/);
   assert.match(page, /id="live-trace"/);
+  assert.match(page, /JetBrains\+Mono/);
+  assert.match(page, /id="repo-connection"/);
+  assert.match(page, /id="greptile-stage"/);
+  assert.match(browser, /renderRepository/);
 });

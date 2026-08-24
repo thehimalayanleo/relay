@@ -5,6 +5,7 @@ let claudeMemReady = false;
 let liveAgentStartedAt = null;
 let selectedWorkspace = null;
 let discoveredWorkspaces = null;
+let greptileUiStage = null;
 const syncedSessions = new Set();
 
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[c]));
@@ -25,14 +26,42 @@ function remember() {
 const status = (message) => { byId("truth").textContent = message; };
 async function syncGreptile(attempts = 1) {
   if (!snapshot?.repository?.prNumber) return null;
+  greptileUiStage = { label: "Syncing findings", state: "busy" }; renderRepository();
   try {
     const metrics = await json(await fetch(`/v1/sessions/${active.id}/greptile/sync`, { method: "POST", headers: authHeaders() }));
+    greptileUiStage = metrics.totals?.opened === 0 ? { label: "Review passed", state: "ready" } : { label: "Findings ready", state: "ready" };
+    renderRepository();
     if (attempts > 1) setTimeout(() => syncGreptile(attempts - 1), 10_000);
     return metrics;
   } catch (error) {
+    greptileUiStage = { label: "Greptile unavailable", state: "error" }; renderRepository();
     byId("greptile-pill").textContent = "Greptile · PR not indexed";
     throw error;
   }
+}
+
+function renderRepository() {
+  if (!snapshot) return;
+  const repository = snapshot.repository ?? {};
+  byId("repo-connection").textContent = repository.remote === "github"
+    ? `${repository.name}${repository.prNumber ? ` / pull ${repository.prNumber}` : ""}`
+    : repository.name || "Local workspace";
+  let stage = greptileUiStage;
+  if (!stage) {
+    const samples = snapshot.greptile?.samples ?? [];
+    const latest = samples.at(-1);
+    const reviewRequested = [...(snapshot.activity ?? [])].reverse().find((event) => event.type === "greptile" && /review requested/i.test(event.detail));
+    const requestPending = reviewRequested && (!snapshot.greptile?.lastSyncAt || new Date(reviewRequested.at) > new Date(snapshot.greptile.lastSyncAt));
+    stage = repository.remote !== "github" ? { label: "Local workspace", state: "ready" }
+      : !repository.prNumber ? { label: "Waiting for pull request", state: "ready" }
+      : requestPending ? { label: "Review requested", state: "busy" }
+      : latest?.opened === 0 && samples.length ? { label: "Review passed", state: "ready" }
+      : samples.length ? { label: "Findings ready", state: "ready" }
+      : { label: "GitHub connected", state: "ready" };
+  }
+  const element = byId("greptile-stage");
+  element.dataset.state = stage.state;
+  element.querySelector("span").textContent = stage.label;
 }
 function liveAgentEvent() {
   const activity = snapshot.activity ?? [];
@@ -119,12 +148,12 @@ function render(next) {
       ? "Greptile · review passed"
       : `Greptile · ${latestGreptile.closed} addressed · ${latestGreptile.remaining} open`;
   document.querySelector(".conversation").classList.toggle("has-content", Boolean((snapshot.activity ?? []).length || (snapshot.agentRuns ?? []).length));
-  renderFeed(); renderTrace(); renderGreptile(); remember();
+  renderRepository(); renderFeed(); renderTrace(); renderGreptile(); remember();
   clearTimeout(memoryTimer); memoryTimer = setTimeout(recallMemory, 900);
 }
 
 async function connect(session) {
-  stream?.close(); clearInterval(presenceTimer); active = session;
+  stream?.close(); clearInterval(presenceTimer); active = session; greptileUiStage = null;
   render(await json(await fetch(`/v1/sessions/${active.id}`, { headers: authHeaders() })));
   active.inviteUrl = snapshot.links?.pmInviteUrl;
   await json(await fetch(`/v1/sessions/${active.id}/join`, { method: "POST", headers: authHeaders({ "content-type": "application/json" }), body: JSON.stringify(person()) }));
@@ -156,9 +185,10 @@ byId("send").onclick = async () => {
     status("Agent continuation queued on the host.");
     const requestedBy = `${person().name} agent · ${person().role}`;
     if (snapshot.repository.prNumber) {
+      greptileUiStage = { label: "Requesting review", state: "busy" }; renderRepository();
       fetch(`/v1/sessions/${active.id}/greptile/review`, { method: "POST", headers: authHeaders() })
-        .then(json).then(() => { byId("greptile-pill").textContent = "Greptile · review running"; syncGreptile(6).catch(() => {}); })
-        .catch((error) => { byId("greptile-pill").textContent = `Greptile · ${error.message.includes("not found") ? "PR not indexed" : "review unavailable"}`; });
+        .then(json).then(() => { greptileUiStage = { label: "Review running", state: "busy" }; renderRepository(); byId("greptile-pill").textContent = "Greptile · review running"; syncGreptile(6).catch(() => {}); })
+        .catch((error) => { greptileUiStage = { label: error.message.includes("not found") ? "Repository not indexed" : "Review unavailable", state: "error" }; renderRepository(); byId("greptile-pill").textContent = `Greptile · ${error.message.includes("not found") ? "PR not indexed" : "review unavailable"}`; });
     }
     fetch(`/v1/sessions/${active.id}/agent/run`, { method: "POST", headers: authHeaders({ "content-type": "application/json" }), body: JSON.stringify({ target: "opencode", requestedBy, instructions: value }) })
       .then(json).then(() => { status("Host agent completed. Full response preserved above."); syncGreptile(3).catch(() => {}); }).catch((error) => status(`Agent failed: ${error.message}`));
