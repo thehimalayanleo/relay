@@ -1,6 +1,5 @@
 const FAILURE_PATTERNS = [
   /tests?\s+(?:are\s+)?fail(?:ed|ing)?/i,
-  /no progress/i,
   /unable to (?:complete|solve|proceed)/i,
   /repeated (?:the same )?(?:hypothesis|error|failure)/i,
 ];
@@ -11,7 +10,7 @@ export function escalationDecision(result, options = {}) {
   if (Number(result?.exitCode ?? 1) !== 0) return { escalate: true, reason: `fast model exited with status ${result.exitCode}` };
   const response = String(options.response ?? "").trim();
   if (!response || response === "OpenCode completed with no text response.") return { escalate: true, reason: "fast model returned no usable response" };
-  if (Number(options.progressCount ?? 0) >= Number(options.stepBudget ?? 10)) return { escalate: true, reason: `fast model exhausted the ${options.stepBudget ?? 10}-step budget` };
+  if (options.noProgress === true && Number(options.stepCount ?? 0) >= Number(options.stepBudget ?? 10)) return { escalate: true, reason: `fast model made no verified progress within ${options.stepBudget ?? 10} steps` };
   const matched = FAILURE_PATTERNS.find((pattern) => pattern.test(response));
   return matched ? { escalate: true, reason: "fast model reported a blocked or failed attempt" } : { escalate: false, reason: null };
 }

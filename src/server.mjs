@@ -446,7 +446,7 @@ export async function createRelayServer(options = {}) {
         }, async (queueJob) => {
           await sessions.addActivity(session.id, token, { type: "agent-running", actor: requestedBy, detail: `working in ${target} through the shared Sailbox · fast model` });
           await sessions.addActivity(session.id, token, { type: "agent-progress", actor: requestedBy, detail: "Thinking: OpenCode model step requested" });
-          let lastProgressAt = 0, progressBuffer = "", progressCount = 0, lastProgressDetail = "";
+          let lastProgressAt = 0, progressBuffer = "", progressCount = 0, modelStepCount = 0, lastProgressDetail = "";
           let progressWrites = Promise.resolve();
           let result;
           try {
@@ -456,6 +456,7 @@ export async function createRelayServer(options = {}) {
               sessionId: session.id,
               model: fastModel,
               onProgress: (chunk) => {
+                modelStepCount += (String(chunk).match(/"type"\s*:\s*"step_finish"/g) ?? []).length;
                 progressBuffer += chunk;
                 const lines = progressBuffer.split("\n");
                 progressBuffer = lines.pop() ?? "";
@@ -487,7 +488,8 @@ export async function createRelayServer(options = {}) {
             enabled: escalationEnabled,
             attempt: 0,
             response: initialResponse,
-            progressCount,
+            stepCount: modelStepCount,
+            noProgress: /no (?:verified )?progress|no changes? (?:made|produced)/i.test(initialResponse),
             stepBudget: Number.isFinite(escalationStepBudget) ? escalationStepBudget : 10,
           });
           let escalation = null;

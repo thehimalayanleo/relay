@@ -11,7 +11,11 @@ test("escalates one failed fast-model attempt", () => {
 });
 
 test("does not escalate a successful bounded attempt", () => {
-  assert.equal(escalationDecision({ exitCode: 0 }, { attempt: 0, response: "Implemented and tests pass.", progressCount: 4, stepBudget: 10 }).escalate, false);
+  assert.equal(escalationDecision({ exitCode: 0 }, { attempt: 0, response: "Implemented and tests pass.", stepCount: 14, stepBudget: 10, noProgress: false }).escalate, false);
+});
+
+test("step budget escalates only an explicit no-progress attempt", () => {
+  assert.equal(escalationDecision({ exitCode: 0 }, { attempt: 0, response: "No verified progress.", stepCount: 10, stepBudget: 10, noProgress: true }).escalate, true);
 });
 
 test("supplies only open Greptile evidence to the retry", () => {
