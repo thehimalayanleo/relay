@@ -48,8 +48,10 @@ test("browser bundle contains no provider credentials or provider API authorizat
 test("browser send path seals context before queuing the host agent", async () => {
   const browser = await readFile(new URL("../public/greptile-demo.js", import.meta.url), "utf8");
   const checkpoint = browser.indexOf("/checkpoints`");
+  const greptileReview = browser.indexOf("/greptile/review`");
   const agentRun = browser.indexOf("/agent/run`");
   assert.ok(checkpoint > 0);
+  assert.ok(greptileReview > checkpoint);
   assert.ok(agentRun > checkpoint);
 });
 

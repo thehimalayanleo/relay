@@ -350,6 +350,22 @@ export async function createRelayServer(options = {}) {
         return;
       }
 
+      const sessionGreptileReviewMatch = url.pathname.match(/^\/v1\/sessions\/([0-9a-f-]{36})\/greptile\/review$/i);
+      if (request.method === "POST" && sessionGreptileReviewMatch) {
+        sessionRateLimiter.check(sessionGreptileReviewMatch[1], 10);
+        const token = requestToken(request, url);
+        const session = await sessions.get(sessionGreptileReviewMatch[1], token);
+        if (!session.repository.prNumber) {
+          const error = new Error("Link a pull request before requesting a Greptile review.");
+          error.code = "NO_PULL_REQUEST";
+          throw error;
+        }
+        const review = await greptileClient.triggerCodeReview(session.repository);
+        await sessions.addActivity(session.id, token, { type: "greptile", actor: "Greptile", detail: `review requested for PR #${session.repository.prNumber}` });
+        sendJson(response, 202, { status: "review-triggered", review });
+        return;
+      }
+
       const sessionCheckpointMatch = url.pathname.match(/^\/v1\/sessions\/([0-9a-f-]{36})\/checkpoints$/i);
       if (request.method === "POST" && sessionCheckpointMatch) {
         sessionRateLimiter.check(sessionCheckpointMatch[1], 10);

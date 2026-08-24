@@ -23,6 +23,17 @@ function remember() {
   renderSessions();
 }
 const status = (message) => { byId("truth").textContent = message; };
+async function syncGreptile(attempts = 1) {
+  if (!snapshot?.repository?.prNumber) return null;
+  try {
+    const metrics = await json(await fetch(`/v1/sessions/${active.id}/greptile/sync`, { method: "POST", headers: authHeaders() }));
+    if (attempts > 1) setTimeout(() => syncGreptile(attempts - 1), 10_000);
+    return metrics;
+  } catch (error) {
+    byId("greptile-pill").textContent = "Greptile · PR not indexed";
+    throw error;
+  }
+}
 function liveAgentEvent() {
   const activity = snapshot.activity ?? [];
   const runs = snapshot.agentRuns ?? [];
@@ -111,7 +122,7 @@ async function connect(session) {
   status(["pm", "collaborator"].includes(active.role) ? "You are in Ajinkya’s live workspace. No setup required." : `Session ready · invite expires ${new Date(snapshot.expiresAt).toLocaleString()}`);
   if (snapshot.repository.prNumber && !syncedSessions.has(active.id)) {
     syncedSessions.add(active.id);
-    fetch(`/v1/sessions/${active.id}/greptile/sync`, { method: "POST", headers: authHeaders() }).then(json).then((metrics) => status(`Greptile review ${metrics.iteration} synced.`)).catch(() => { byId("greptile-pill").textContent = "Greptile · PR not indexed"; });
+    syncGreptile().then((metrics) => metrics && status(`Greptile review ${metrics.iteration} synced.`)).catch(() => {});
   }
 }
 
@@ -131,8 +142,13 @@ byId("send").onclick = async () => {
     await json(await fetch(`/v1/sessions/${active.id}/checkpoints`, { method: "POST", headers: authHeaders({ "content-type": "application/json" }), body: JSON.stringify({ actor: person().name }) }));
     status("Agent continuation queued on the host.");
     const requestedBy = `${person().name} agent · ${person().role}`;
+    if (snapshot.repository.prNumber) {
+      fetch(`/v1/sessions/${active.id}/greptile/review`, { method: "POST", headers: authHeaders() })
+        .then(json).then(() => { byId("greptile-pill").textContent = "Greptile · review running"; syncGreptile(6).catch(() => {}); })
+        .catch((error) => { byId("greptile-pill").textContent = `Greptile · ${error.message.includes("not found") ? "PR not indexed" : "review unavailable"}`; });
+    }
     fetch(`/v1/sessions/${active.id}/agent/run`, { method: "POST", headers: authHeaders({ "content-type": "application/json" }), body: JSON.stringify({ target: "opencode", requestedBy, instructions: value }) })
-      .then(json).then(() => status("Host agent completed. Full response preserved above.")).catch((error) => status(`Agent failed: ${error.message}`));
+      .then(json).then(() => { status("Host agent completed. Full response preserved above."); syncGreptile(3).catch(() => {}); }).catch((error) => status(`Agent failed: ${error.message}`));
   } catch (error) { status(error.message); }
   finally { byId("send").disabled = false; }
 };
