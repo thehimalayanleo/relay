@@ -60,7 +60,8 @@ function renderFeed() {
     ...exactRuns.map((run) => {
       const participant = cleanLabel(run.requestedBy);
       const inherited = `Problem: ${run.inheritedContext.problem}\nConstraint: ${run.inheritedContext.constraint}\nNext: ${run.inheritedContext.nextAction}`;
-      return { at: run.completedAt, html: `<article class="event"><div class="avatar">${esc(participant[0])}</div><div class="bubble"><strong>${esc(participant)}</strong><time>${new Date(run.completedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time><span class="inherited">Completed through the serialized host queue</span><div class="agent-response">${esc(run.response)}</div><details class="run-context"><summary>Inherited context</summary><div class="agent-response">${esc(inherited)}</div></details></div></article>` };
+      const escalation = run.escalation ? `<span class="inherited">Escalated once · ${esc(run.escalation.greptileEvidence.length)} Greptile finding${run.escalation.greptileEvidence.length === 1 ? "" : "s"} · checkpoint preserved</span>` : "";
+      return { at: run.completedAt, html: `<article class="event"><div class="avatar">${esc(participant[0])}</div><div class="bubble"><strong>${esc(participant)}</strong><time>${new Date(run.completedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time><span class="inherited">Completed through the serialized host queue</span>${escalation}<div class="agent-response">${esc(run.response)}</div><details class="run-context"><summary>Inherited context</summary><div class="agent-response">${esc(inherited)}</div></details></div></article>` };
     }),
   ].sort((a, b) => new Date(a.at) - new Date(b.at));
   if (timeline.length || liveHtml) { byId("feed").innerHTML = timeline.map((item) => item.html).join("") + liveHtml; return; }
@@ -70,7 +71,7 @@ function renderFeed() {
 
 function renderTrace() {
   const service = (event) => event.type === "checkpoint" ? "Sail" : event.type === "greptile" ? "Greptile" : event.type.startsWith("agent") ? "OpenCode" : "Relay";
-  const relevant = (snapshot.activity ?? []).filter((event) => ["checkpoint", "greptile", "agent-queued", "agent-running", "agent-progress", "agent-failed", "agent"].includes(event.type)).slice(-30);
+  const relevant = (snapshot.activity ?? []).filter((event) => ["checkpoint", "greptile", "agent-queued", "agent-running", "agent-progress", "agent-escalation", "agent-failed", "agent"].includes(event.type)).slice(-30);
   const rows = relevant.map((event) => `<div class="trace-row ${["agent-running", "agent-progress"].includes(event.type) ? "live" : ""}"><time>${new Date(event.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</time><b>${service(event)}</b><span>${esc(event.detail)}</span></div>`);
   if (liveAgentEvent()) rows.push('<div class="trace-row live"><time>live</time><b>OpenCode</b><span id="trace-heartbeat">Model connected · waiting for the next thinking, tool, or text event</span></div>');
   if (snapshot.claudeMem?.lastRecallAt) rows.push(`<div class="trace-row"><time>${new Date(snapshot.claudeMem.lastRecallAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</time><b>Claude-Mem</b><span>${snapshot.claudeMem.observationIds.length} memory references supplied</span></div>`);

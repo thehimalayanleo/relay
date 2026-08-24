@@ -19,6 +19,7 @@ import { ClaudeMemClient } from "./claude-mem.mjs";
 import { AgentRunQueue } from "./agent-queue.mjs";
 import { SessionFileStore, SessionService } from "./sessions.mjs";
 import { allowedRequestOrigin, publicOrigin, sessionLinks, SessionRateLimiter } from "./host-security.mjs";
+import { escalationDecision, escalationPrompt, greptileEvidence } from "./escalation.mjs";
 
 const sourceDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.dirname(sourceDir);
@@ -92,6 +93,11 @@ function externalOrigin(request, url) {
   const protocol = request.headers["x-forwarded-proto"] ?? url.protocol.replace(":", "");
   const host = request.headers["x-forwarded-host"] ?? request.headers.host;
   return `${protocol}://${host}`;
+}
+
+function modelDisplayName(model) {
+  const name = String(model).split("/").at(-1) || "model";
+  return name.replace(/^gpt-/i, "GPT-").replace(/-sol$/i, " Sol").replace(/-luna$/i, " Luna").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function hostStatus({ workPodProvider, greptileClient, claudeMem, agentRunner }) {
@@ -178,6 +184,10 @@ export async function createRelayServer(options = {}) {
   const collaboration = options.collaboration ?? new CollaborationHub();
   const claudeMem = options.claudeMem ?? new ClaudeMemClient();
   const agentQueue = options.agentQueue ?? new AgentRunQueue();
+  const fastModel = options.fastModel ?? process.env.RELAY_OPENCODE_MODEL ?? "opencode-go/ox-alpha-free";
+  const strongModel = options.strongModel ?? process.env.RELAY_STRONG_MODEL ?? "opencode-go/deepseek-v4-pro";
+  const escalationEnabled = options.escalationEnabled ?? process.env.RELAY_ESCALATION_ENABLED !== "false";
+  const escalationStepBudget = Number(options.escalationStepBudget ?? process.env.RELAY_ESCALATION_STEP_BUDGET ?? 10);
   const sessionStore = options.sessionStore ?? new SessionFileStore(path.join(
     options.dataDir ?? process.env.RELAY_DATA_DIR ?? path.join(projectRoot, ".data"),
     "sessions",
@@ -434,7 +444,7 @@ export async function createRelayServer(options = {}) {
         const output = await agentQueue.enqueue(session.id, {
           target, requestedBy,
         }, async (queueJob) => {
-          await sessions.addActivity(session.id, token, { type: "agent-running", actor: requestedBy, detail: `working in ${target} through the shared Sailbox` });
+          await sessions.addActivity(session.id, token, { type: "agent-running", actor: requestedBy, detail: `working in ${target} through the shared Sailbox · fast model` });
           await sessions.addActivity(session.id, token, { type: "agent-progress", actor: requestedBy, detail: "Thinking: OpenCode model step requested" });
           let lastProgressAt = 0, progressBuffer = "", progressCount = 0, lastProgressDetail = "";
           let progressWrites = Promise.resolve();
@@ -444,6 +454,7 @@ export async function createRelayServer(options = {}) {
               requestedBy: body.requestedBy,
               queueJobId: queueJob.id,
               sessionId: session.id,
+              model: fastModel,
               onProgress: (chunk) => {
                 progressBuffer += chunk;
                 const lines = progressBuffer.split("\n");
@@ -470,6 +481,41 @@ export async function createRelayServer(options = {}) {
             if (detail && detail !== lastProgressDetail) progressWrites = progressWrites.then(() => sessions.addActivity(session.id, token, { type: "agent-progress", actor: requestedBy, detail })).catch(() => {});
           }
           await progressWrites;
+          const initialResult = result;
+          const initialResponse = exactAgentResponse(initialResult.stdout);
+          const decision = escalationDecision(initialResult, {
+            enabled: escalationEnabled,
+            attempt: 0,
+            response: initialResponse,
+            progressCount,
+            stepBudget: Number.isFinite(escalationStepBudget) ? escalationStepBudget : 10,
+          });
+          let escalation = null;
+          if (decision.escalate) {
+            await sessions.addActivity(session.id, token, { type: "agent-escalation", actor: "Relay", detail: `${modelDisplayName(fastModel)} stalled · ${decision.reason}` });
+            let evidence = [];
+            try {
+              await sessions.syncGreptile(session.id, token);
+              evidence = greptileEvidence(await sessions.get(session.id, token));
+              await sessions.addActivity(session.id, token, { type: "greptile", actor: "Greptile", detail: evidence.length ? `supplied ${evidence.length} relevant finding${evidence.length === 1 ? "" : "s"}` : "checked repository evidence · no open findings" });
+            } catch (error) {
+              await sessions.addActivity(session.id, token, { type: "greptile", actor: "Greptile", detail: `evidence refresh unavailable · ${redactAgentProgress(error.message)}` });
+            }
+            await sessions.addActivity(session.id, token, { type: "agent-escalation", actor: "Relay", detail: `escalated to ${modelDisplayName(strongModel)} · checkpoint preserved · retry 1 of 1` });
+            const retryPrompt = escalationPrompt(prompt, { reason: decision.reason, evidence, initialResponse });
+            result = await agentRunner.run(retryPrompt, {
+              requestedBy: body.requestedBy,
+              queueJobId: queueJob.id,
+              sessionId: session.id,
+              model: strongModel,
+              onProgress: (chunk) => {
+                const detail = redactAgentProgress(agentProgressSummary(chunk));
+                if (detail) progressWrites = progressWrites.then(() => sessions.addActivity(session.id, token, { type: "agent-progress", actor: requestedBy, detail: `Strong model · ${detail}` })).catch(() => {});
+              },
+            });
+            await progressWrites;
+            escalation = { reason: decision.reason, fastModel, strongModel, greptileEvidence: evidence, attempts: 2 };
+          }
           const latestRecord = await store.get(checkpoint.id);
           const workPod = await workPodProvider.storeAgentResult(latestRecord.workPod, result);
           await store.update(record.id, (current) => ({
@@ -496,6 +542,11 @@ export async function createRelayServer(options = {}) {
               nextAction: session.brief.implementation,
             },
             response: exactAgentResponse(result.stdout),
+            escalation,
+            attempts: escalation ? [
+              { model: fastModel, exitCode: initialResult.exitCode, timedOut: Boolean(initialResult.timedOut), response: initialResponse },
+              { model: strongModel, exitCode: result.exitCode, timedOut: Boolean(result.timedOut), response: exactAgentResponse(result.stdout) },
+            ] : [{ model: fastModel, exitCode: result.exitCode, timedOut: Boolean(result.timedOut), response: exactAgentResponse(result.stdout) }],
           });
           return { status: result.exitCode === 0 ? "agent-completed" : "agent-failed", result, queueJob };
         });

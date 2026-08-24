@@ -285,7 +285,7 @@ The harness receives the resume prompt on stdin and must write its result to std
 node bin/relay.mjs agent '<share-url>' --target generic
 ```
 
-The result is written back into the same work pod as `agents/<run-id>.json`. This is the first no-human loop. A production scheduler, cancellation API, model endpoint policy, and multi-step supervision remain future work.
+The result is written back into the same work pod as `agents/<run-id>.json`. This is the first no-human loop. A production scheduler, cancellation API, and multi-step supervision remain future work.
 
 ### Canonical E2E: two SWEs build the AGI-ARC-3 harness
 
@@ -294,9 +294,13 @@ The host can configure OpenCode Go as Relay's serialized runner:
 ```bash
 export RELAY_AGENT_HARNESS=opencode-go-gpt-5.6-luna
 export RELAY_OPENCODE_MODEL=opencode-go/gpt-5.6-luna
+export RELAY_STRONG_MODEL=opencode-go/deepseek-v4-pro
+export RELAY_ESCALATION_STEP_BUDGET=10
 export RELAY_AGENT_ARGV='["relay-opencode-runner"]'
 relay serve --host 0.0.0.0 --public-url http://<tailscale-name>:4317
 ```
+
+Each serialized queue job gets at most one strong-model retry. Relay escalates after a timeout, nonzero exit, empty response, exhausted step budget, or an explicit blocked or failed result. Before retrying, it refreshes open Greptile findings and adds up to three relevant findings to the preserved checkpoint. The activity stream records the reason, evidence count, models, and outcome. Set `RELAY_ESCALATION_ENABLED=false` to disable this policy.
 
 Ajinkya starts the AGI-ARC-3 harness from his local Relay app. Sanjana joins as a second SWE through the capability link, adds a concrete fresh-reset replay constraint, and hands the shared state back. Ajinkya's local agent continues from the same Sailbox with Sanjana's wording present in its inherited context. Relay retains the exact response and queue evidence.
 

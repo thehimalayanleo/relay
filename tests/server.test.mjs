@@ -186,3 +186,45 @@ test("capability holder can run a configured autonomous harness and terminate th
     assert.equal(terminated.workPod.state, "terminated");
   }, { agentRunner: fakeRunner });
 });
+
+test("session queue performs one bounded strong-model retry with Greptile evidence", async () => {
+  const models = [];
+  const fakeRunner = {
+    status: () => ({ configured: true, harness: "opencode-go", transport: "process" }),
+    run: async (_prompt, context) => {
+      models.push(context.model);
+      return {
+        id: `agent-run-${models.length}`,
+        harness: "opencode-go",
+        startedAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+        durationMs: 4,
+        exitCode: models.length === 1 ? 1 : 0,
+        stdout: models.length === 1 ? "tests failed" : "fixed with the replay guard",
+        stderr: "",
+      };
+    },
+  };
+  const fakeGreptile = {
+    configured: () => true,
+    listGreptileComments: async (_repository, addressed) => addressed ? { comments: [] } : { comments: [{ id: "G-1", path: "arc/replay.py", body: "Reject stale observations" }] },
+  };
+  await withServer(async (origin) => {
+    const created = await (await fetch(`${origin}/v1/sessions`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ title: "ARC retry", repository: { name: "acme/arc", prNumber: 1 } }),
+    })).json();
+    const headers = { authorization: `Bearer ${created.token}`, "content-type": "application/json" };
+    await fetch(`${origin}/v1/sessions/${created.id}/checkpoints`, { method: "POST", headers, body: JSON.stringify({ actor: "Ajinkya" }) });
+    const response = await fetch(`${origin}/v1/sessions/${created.id}/agent/run`, {
+      method: "POST", headers, body: JSON.stringify({ requestedBy: "Ajinkya", target: "generic" }),
+    });
+    assert.equal(response.status, 201);
+    assert.deepEqual(models, ["fast-test", "strong-test"]);
+    const session = await (await fetch(`${origin}/v1/sessions/${created.id}`, { headers })).json();
+    assert.equal(session.agentRuns[0].attempts.length, 2);
+    assert.equal(session.agentRuns[0].escalation.greptileEvidence.length, 1);
+    assert.match(session.agentRuns[0].response, /replay guard/);
+    assert.equal(session.activity.filter((event) => event.type === "agent-escalation").length, 2);
+  }, { agentRunner: fakeRunner, greptileClient: fakeGreptile, fastModel: "fast-test", strongModel: "strong-test" });
+});

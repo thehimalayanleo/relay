@@ -56,6 +56,7 @@ export class ConfiguredAgentRunner {
         RELAY_AGENT_REQUESTED_BY: String(context.requestedBy ?? ""),
         RELAY_AGENT_QUEUE_JOB_ID: String(context.queueJobId ?? ""),
         RELAY_AGENT_SESSION_ID: String(context.sessionId ?? ""),
+        ...(context.model ? { RELAY_OPENCODE_MODEL: String(context.model) } : {}),
       },
       shell: false,
       stdio: ["pipe", "pipe", "pipe"],
