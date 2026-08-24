@@ -12,7 +12,7 @@ const requestedBy = (process.env.RELAY_AGENT_REQUESTED_BY ?? "collaborator").rep
 const title = `relay-${requestedBy}-${process.pid}-${Date.now()}`;
 const workspace = process.env.RELAY_AGENT_CWD || process.cwd();
 const child = spawn("opencode", [
-  "run", "--pure", "--format", "json", "--model", model, "--title", title, "--dir", workspace, prompt,
+  "run", "--pure", "--thinking", "--format", "json", "--model", model, "--title", title, "--dir", workspace, prompt,
 ], { cwd: workspace, env: process.env, stdio: ["ignore", "pipe", "pipe"], shell: false });
 
 child.stdout.pipe(process.stdout);

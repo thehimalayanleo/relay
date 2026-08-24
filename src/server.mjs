@@ -450,7 +450,7 @@ export async function createRelayServer(options = {}) {
                 for (const line of lines) {
                   const now = Date.now();
                   const detail = redactAgentProgress(agentProgressSummary(line));
-                  const meaningful = detail.startsWith("Writing:") || detail.startsWith("Using ") || detail.startsWith("Tool:");
+                  const meaningful = detail.startsWith("Writing:") || detail.startsWith("Thinking:") || detail.startsWith("Using ") || detail.startsWith("Tool:");
                   if (!detail || detail === lastProgressDetail || progressCount >= 80 || (!meaningful && now - lastProgressAt < 1_500) || (detail.startsWith("Writing:") && now - lastProgressAt < 350)) continue;
                   lastProgressAt = now;
                   lastProgressDetail = detail;
@@ -966,7 +966,8 @@ function exactAgentResponse(stdout = "") {
   for (const line of String(stdout).split("\n")) {
     try {
       const event = JSON.parse(line);
-      const candidate = event?.part?.text ?? event?.text ?? (event?.type === "text" ? event?.content : "");
+      const part = event?.part ?? {};
+      const candidate = (event?.type === "text" || part.type === "text") ? (part.text ?? event?.text ?? event?.content ?? "") : "";
       if (typeof candidate === "string" && candidate.trim()) text.push(candidate.trim());
     } catch {
       if (line.trim() && !line.includes('"sessionID"')) text.push(line.trim());
@@ -981,6 +982,7 @@ function agentProgressSummary(chunk = "") {
       const event = JSON.parse(line);
       const part = event?.part ?? {};
       if ((event.type === "text" || part.type === "text") && typeof part.text === "string" && part.text.trim()) return `Writing: ${part.text.trim().replace(/\s+/g, " ").slice(0, 240)}`;
+      if ((event.type === "reasoning" || part.type === "reasoning") && typeof part.text === "string" && part.text.trim()) return `Thinking: ${part.text.trim().replace(/\s+/g, " ").slice(0, 240)}`;
       if (String(part.type ?? event.type).includes("tool")) return `Tool: ${part.tool ?? part.name ?? event.name ?? "workspace tool"}${part.state?.status ? ` · ${part.state.status}` : ""}`;
       if (event.type === "step_start") return "Started a new model step";
       if (event.type === "step_finish") return "Finished a model step";

@@ -72,6 +72,7 @@ function renderTrace() {
   const service = (event) => event.type === "checkpoint" ? "Sail" : event.type === "greptile" ? "Greptile" : event.type.startsWith("agent") ? "OpenCode" : "Relay";
   const relevant = (snapshot.activity ?? []).filter((event) => ["checkpoint", "greptile", "agent-queued", "agent-running", "agent-progress", "agent-failed", "agent"].includes(event.type)).slice(-30);
   const rows = relevant.map((event) => `<div class="trace-row ${["agent-running", "agent-progress"].includes(event.type) ? "live" : ""}"><time>${new Date(event.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</time><b>${service(event)}</b><span>${esc(event.detail)}</span></div>`);
+  if (liveAgentEvent()) rows.push('<div class="trace-row live"><time>live</time><b>OpenCode</b><span id="trace-heartbeat">Model connected · waiting for the next thinking, tool, or text event</span></div>');
   if (snapshot.claudeMem?.lastRecallAt) rows.push(`<div class="trace-row"><time>${new Date(snapshot.claudeMem.lastRecallAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</time><b>Claude-Mem</b><span>${snapshot.claudeMem.observationIds.length} memory references supplied</span></div>`);
   byId("live-trace").innerHTML = rows.length ? rows.join("") : '<div class="trace-row"><time>now</time><b>Relay</b><span>Waiting for host work</span></div>';
   const trace = byId("live-trace");
@@ -200,4 +201,6 @@ setInterval(() => {
   const seconds = Math.max(0, Math.floor((Date.now() - new Date(liveAgentStartedAt).getTime()) / 1000));
   elapsed.textContent = seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
   if (byId("coordination-detail")?.textContent.startsWith("Live host execution")) byId("coordination-detail").textContent = `Live host execution · ${elapsed.textContent} · next role waits in queue`;
+  const heartbeat = byId("trace-heartbeat");
+  if (heartbeat) heartbeat.textContent = `Model connected · ${elapsed.textContent} · waiting for the next thinking, tool, or text event`;
 }, 1000);
