@@ -110,11 +110,19 @@ function modelDisplayName(model) {
   return name.replace(/^gpt-/i, "GPT-").replace(/-sol$/i, " Sol").replace(/-luna$/i, " Luna").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function hostStatus({ workPodProvider, greptileClient, claudeMem, agentRunner }) {
+function hostStatus({ workPodProvider, greptileClient, memory, agentRunner, hostedOnSail = false }) {
+  const workPod = workPodProvider.status();
   return {
-    sail: { configured: workPodProvider.status().provider === "sail" && workPodProvider.status().configured },
-    greptile: { configured: greptileClient.configured() },
-    claudeMem: { available: Boolean(claudeMem) },
+    sail: {
+      configured: hostedOnSail || (workPod.provider === "sail" && workPod.configured),
+      hosted: hostedOnSail,
+    },
+    greptile: { configured: greptileClient.configured(), connected: false },
+    claudeMem: {
+      configured: memory.connected === true,
+      connected: memory.connected === true,
+      version: memory.version ?? null,
+    },
     model: { configured: agentRunner.status().configured, serialized: true },
   };
 }
@@ -210,6 +218,22 @@ export async function createRelayServer(options = {}) {
   const sessionRateLimiter = options.sessionRateLimiter ?? new SessionRateLimiter({
     limit: Number.isFinite(configuredRateLimit) && configuredRateLimit > 0 ? configuredRateLimit : 600,
   });
+  let memoryHealth = { connected: false, version: null };
+  let memoryHealthExpiresAt = 0;
+  let memoryHealthPromise = null;
+  async function currentHostStatus() {
+    if (Date.now() >= memoryHealthExpiresAt && !memoryHealthPromise) {
+      memoryHealthPromise = claudeMem.status({ timeoutMs: 500 })
+        .then((status) => { memoryHealth = status; })
+        .catch(() => { memoryHealth = { connected: false, version: null }; })
+        .finally(() => {
+          memoryHealthExpiresAt = Date.now() + 10_000;
+          memoryHealthPromise = null;
+        });
+    }
+    if (memoryHealthPromise) await memoryHealthPromise;
+    return hostStatus({ workPodProvider, greptileClient, memory: memoryHealth, agentRunner, hostedOnSail });
+  }
 
   return createHttpServer(async (request, response) => {
     const url = new URL(request.url, `http://${request.headers.host ?? "localhost"}`);
@@ -252,7 +276,7 @@ export async function createRelayServer(options = {}) {
           hostAccessProtected: Boolean(configuredHostToken),
           workPod: workPodProvider.status(),
           autonomousAgent: agentRunner.status(),
-          hostIntegrations: hostStatus({ workPodProvider, greptileClient, claudeMem, agentRunner }),
+          hostIntegrations: await currentHostStatus(),
           integrations: {
             greptile: {
               adapterSecretConfigured: Boolean(process.env.GREPTILE_RELAY_SECRET),
@@ -313,7 +337,7 @@ export async function createRelayServer(options = {}) {
         sendJson(response, 200, {
           ...session,
           links,
-          hostIntegrations: hostStatus({ workPodProvider, greptileClient, claudeMem, agentRunner }),
+          hostIntegrations: await currentHostStatus(),
         });
         return;
       }

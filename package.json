@@ -52,7 +52,7 @@
     "run:arc-autonomous": "node scripts/run-arc-autonomous-loop.mjs"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20 <26"
   },
   "dependencies": {
     "@sailresearch/sdk": "^0.9.0"

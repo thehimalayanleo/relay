@@ -27,8 +27,8 @@ export class ClaudeMemClient {
     return response.json();
   }
 
-  async status() {
-    const health = await this.request("/api/health", { timeoutMs: 3_000 });
+  async status(options = {}) {
+    const health = await this.request("/api/health", { timeoutMs: options.timeoutMs ?? 3_000 });
     return {
       connected: health.status === "ok" && health.mcpReady === true,
       version: health.version ?? null,
@@ -53,4 +53,3 @@ export class ClaudeMemClient {
     };
   }
 }
-

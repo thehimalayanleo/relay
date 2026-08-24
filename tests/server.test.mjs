@@ -130,7 +130,14 @@ test("Sail-hosted mode protects session creation with a host token", async () =>
     assert.match(created.collaboratorInviteUrl, /^https:\/\/relay\.sail\.example/);
     const health = await (await fetch(`${origin}/health`)).json();
     assert.equal(health.hostAccessProtected, true);
-  }, { hostToken: "host-control", hostedOnSail: true, publicUrl: "https://relay.sail.example" });
+    assert.deepEqual(health.hostIntegrations.sail, { configured: true, hosted: true });
+    assert.equal(health.hostIntegrations.claudeMem.connected, false);
+  }, {
+    hostToken: "host-control",
+    hostedOnSail: true,
+    publicUrl: "https://relay.sail.example",
+    claudeMem: { status: async () => ({ connected: false, version: null }) },
+  });
 });
 
 test("JavaScript client transfers and pulls the same capsule across harness renderers", async () => {
