@@ -122,7 +122,8 @@ function renderGreptile() {
         : `Review ${latest.iteration}`
       : "Waiting for first review";
   const max = Math.max(1, ...samples.flatMap((sample) => [sample.closed, sample.remaining]));
-  byId("greptile-spark").innerHTML = samples.length ? samples.map((sample) => `<span class="spark-sample" title="${sample.closed} addressed, ${sample.remaining} open"><i style="height:${Math.max(2, sample.closed / max * 100)}%"></i><i class="open" style="height:${Math.max(2, sample.remaining / max * 100)}%"></i></span>`).join("") : '<span style="color:#666;font-size:10px;padding-bottom:7px">No Greptile samples yet</span>';
+  const hasValues = samples.some((sample) => Number(sample.closed) + Number(sample.remaining) > 0);
+  byId("greptile-spark").innerHTML = hasValues ? samples.map((sample) => `<span class="spark-sample" title="Review ${sample.iteration}: ${sample.closed} addressed, ${sample.remaining} open"><i style="height:${sample.closed / max * 100}%"></i><i class="open" style="height:${sample.remaining / max * 100}%"></i></span>`).join("") : samples.length ? '<span class="plot-empty">Review passed · 0 code findings</span>' : '<span class="plot-empty">No Greptile review samples yet</span>';
   const findings = Object.values(snapshot.greptile?.findings ?? {});
   byId("greptile-findings").innerHTML = findings.length ? findings.map((finding) => `<details class="finding"><summary><code>${esc(finding.id)}</code> · ${esc(finding.path || "repository")}${finding.state === "closed" ? " · addressed" : finding.state === "unknown" ? " · status unknown" : ""}</summary><p>${esc(finding.summary || "No finding text returned.")}</p></details>`).join("") : "";
 }
@@ -140,6 +141,7 @@ function render(next) {
   byId("coordination-detail").textContent = liveAgent ? "Live host execution · next role waits in queue" : latestRun ? "Latest shared-stack continuation, preserved word for word" : `${snapshot.checkpoints.length} checkpoint${snapshot.checkpoints.length === 1 ? "" : "s"} · ready on host`;
   byId("host-mode").textContent = active.role === "agent" ? "Standalone agent mode" : ["pm", "collaborator"].includes(active.role) ? "Connected as Sanjana · SWE" : "Host integrations ready";
   byId("host-help").textContent = active.role === "agent" ? "Runs without either browser open" : ["pm", "collaborator"].includes(active.role) ? "No local keys required" : "Powered by host integrations";
+  byId("preview-session").href = snapshot.links?.collaboratorInviteUrl ?? snapshot.links?.pmInviteUrl ?? "#";
   const greptileSamples = snapshot.greptile?.samples ?? [];
   const latestGreptile = snapshot.greptile?.samples?.at(-1) ?? { closed: 0, remaining: 0 };
   byId("greptile-pill").textContent = !snapshot.repository.prNumber
@@ -208,7 +210,6 @@ async function recallMemory() {
 }
 
 byId("invite-session").onclick = async () => { if (!snapshot) return; await navigator.clipboard.writeText(snapshot.links?.collaboratorInviteUrl ?? snapshot.links?.pmInviteUrl ?? active.inviteUrl); status("Invite copied. Sanjana only needs the link."); };
-byId("preview-session").onclick = () => snapshot && window.open(snapshot.links?.collaboratorInviteUrl ?? snapshot.links?.pmInviteUrl ?? active.inviteUrl, "relay-swe-preview");
 
 const dialog = byId("session-dialog");
 async function discoverWorkspaces() {
