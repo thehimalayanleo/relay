@@ -6,6 +6,7 @@ test("OpenCode text and tool events become readable progress", () => {
   assert.equal(serverInternals.agentProgressSummary(JSON.stringify({ type: "text", part: { text: "Inspecting the replay path" } })), "Writing: Inspecting the replay path");
   assert.equal(serverInternals.agentProgressSummary(JSON.stringify({ type: "tool", part: { tool: "read", state: { status: "running" } } })), "Tool: read · running");
   assert.equal(serverInternals.agentProgressSummary(JSON.stringify({ type: "reasoning", part: { type: "reasoning", text: "Checking the replay invariant" } })), "Thinking: Checking the replay invariant");
+  assert.equal(serverInternals.agentProgressSummary(JSON.stringify({ type: "step_finish", part: { tokens: { reasoning: 46 } } })), "Thinking complete · 46 reasoning tokens");
 });
 
 test("live progress redacts common credential shapes", () => {

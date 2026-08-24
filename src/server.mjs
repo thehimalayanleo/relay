@@ -435,6 +435,7 @@ export async function createRelayServer(options = {}) {
           target, requestedBy,
         }, async (queueJob) => {
           await sessions.addActivity(session.id, token, { type: "agent-running", actor: requestedBy, detail: `working in ${target} through the shared Sailbox` });
+          await sessions.addActivity(session.id, token, { type: "agent-progress", actor: requestedBy, detail: "Thinking: OpenCode model step requested" });
           let lastProgressAt = 0, progressBuffer = "", progressCount = 0, lastProgressDetail = "";
           let progressWrites = Promise.resolve();
           let result;
@@ -984,8 +985,8 @@ function agentProgressSummary(chunk = "") {
       if ((event.type === "text" || part.type === "text") && typeof part.text === "string" && part.text.trim()) return `Writing: ${part.text.trim().replace(/\s+/g, " ").slice(0, 240)}`;
       if ((event.type === "reasoning" || part.type === "reasoning") && typeof part.text === "string" && part.text.trim()) return `Thinking: ${part.text.trim().replace(/\s+/g, " ").slice(0, 240)}`;
       if (String(part.type ?? event.type).includes("tool")) return `Tool: ${part.tool ?? part.name ?? event.name ?? "workspace tool"}${part.state?.status ? ` · ${part.state.status}` : ""}`;
-      if (event.type === "step_start") return "Started a new model step";
-      if (event.type === "step_finish") return "Finished a model step";
+      if (event.type === "step_start") return "Thinking: model step started";
+      if (event.type === "step_finish") return `Thinking complete${part.tokens?.reasoning != null ? ` · ${part.tokens.reasoning} reasoning tokens` : ""}`;
     } catch {}
   }
   return "Receiving live model output";
