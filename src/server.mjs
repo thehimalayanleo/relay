@@ -419,21 +419,39 @@ export async function createRelayServer(options = {}) {
           target, requestedBy,
         }, async (queueJob) => {
           await sessions.addActivity(session.id, token, { type: "agent-running", actor: requestedBy, detail: `working in ${target} through the shared Sailbox` });
-          let lastProgressAt = 0;
+          let lastProgressAt = 0, progressBuffer = "", progressCount = 0, lastProgressDetail = "";
           let progressWrites = Promise.resolve();
-          const result = await agentRunner.run(prompt, {
-            requestedBy: body.requestedBy,
-            queueJobId: queueJob.id,
-            sessionId: session.id,
-            onProgress: (chunk) => {
-              const now = Date.now();
-              const detail = agentProgressSummary(chunk);
-              const meaningful = detail.startsWith("Writing:") || detail.startsWith("Using ");
-              if (!meaningful && now - lastProgressAt < 1_500) return;
-              lastProgressAt = now;
-              progressWrites = progressWrites.then(() => sessions.addActivity(session.id, token, { type: "agent-progress", actor: requestedBy, detail })).catch(() => {});
-            },
-          });
+          let result;
+          try {
+            result = await agentRunner.run(prompt, {
+              requestedBy: body.requestedBy,
+              queueJobId: queueJob.id,
+              sessionId: session.id,
+              onProgress: (chunk) => {
+                progressBuffer += chunk;
+                const lines = progressBuffer.split("\n");
+                progressBuffer = lines.pop() ?? "";
+                for (const line of lines) {
+                  const now = Date.now();
+                  const detail = redactAgentProgress(agentProgressSummary(line));
+                  const meaningful = detail.startsWith("Writing:") || detail.startsWith("Using ") || detail.startsWith("Tool:");
+                  if (!detail || detail === lastProgressDetail || progressCount >= 80 || (!meaningful && now - lastProgressAt < 1_500) || (detail.startsWith("Writing:") && now - lastProgressAt < 350)) continue;
+                  lastProgressAt = now;
+                  lastProgressDetail = detail;
+                  progressCount += 1;
+                  progressWrites = progressWrites.then(() => sessions.addActivity(session.id, token, { type: "agent-progress", actor: requestedBy, detail })).catch(() => {});
+                }
+              },
+            });
+          } catch (error) {
+            await progressWrites;
+            await sessions.addActivity(session.id, token, { type: "agent-failed", actor: requestedBy, detail: `host runner failed: ${redactAgentProgress(error.message)}` });
+            throw error;
+          }
+          if (progressBuffer.trim() && progressCount < 80) {
+            const detail = redactAgentProgress(agentProgressSummary(progressBuffer));
+            if (detail && detail !== lastProgressDetail) progressWrites = progressWrites.then(() => sessions.addActivity(session.id, token, { type: "agent-progress", actor: requestedBy, detail })).catch(() => {});
+          }
           await progressWrites;
           const latestRecord = await store.get(checkpoint.id);
           const workPod = await workPodProvider.storeAgentResult(latestRecord.workPod, result);
@@ -946,11 +964,20 @@ function agentProgressSummary(chunk = "") {
     try {
       const event = JSON.parse(line);
       const part = event?.part ?? {};
-      if (event.type === "text" && typeof part.text === "string" && part.text.trim()) return `Writing: ${part.text.trim().replace(/\s+/g, " ").slice(0, 180)}`;
-      if (part.type === "tool" || event.type === "tool") return `Using ${part.tool ?? part.name ?? "a workspace tool"}`;
+      if ((event.type === "text" || part.type === "text") && typeof part.text === "string" && part.text.trim()) return `Writing: ${part.text.trim().replace(/\s+/g, " ").slice(0, 240)}`;
+      if (String(part.type ?? event.type).includes("tool")) return `Tool: ${part.tool ?? part.name ?? event.name ?? "workspace tool"}${part.state?.status ? ` · ${part.state.status}` : ""}`;
       if (event.type === "step_start") return "Started a new model step";
       if (event.type === "step_finish") return "Finished a model step";
     } catch {}
   }
   return "Receiving live model output";
 }
+
+function redactAgentProgress(value = "") {
+  return String(value)
+    .replace(/\bBearer\s+[A-Za-z0-9._~+\/-]+/gi, "Bearer [REDACTED]")
+    .replace(/\b(api[_-]?key|token|secret|password)\b\s*[:=]\s*[^\s,;]+/gi, "$1=[REDACTED]")
+    .slice(0, 500);
+}
+
+export const serverInternals = { exactAgentResponse, agentProgressSummary, redactAgentProgress };

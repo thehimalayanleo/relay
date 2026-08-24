@@ -23,6 +23,13 @@ function remember() {
   renderSessions();
 }
 const status = (message) => { byId("truth").textContent = message; };
+function liveAgentEvent() {
+  const activity = snapshot.activity ?? [];
+  const runs = snapshot.agentRuns ?? [];
+  return [...activity].reverse().find((event) => ["agent-running", "agent-progress"].includes(event.type)
+    && !runs.some((run) => run.requestedBy === event.actor && new Date(run.completedAt) >= new Date(event.at))
+    && !activity.some((later) => later.type === "agent-failed" && later.actor === event.actor && new Date(later.at) >= new Date(event.at)));
+}
 
 function renderSessions() {
   const list = recents();
@@ -33,7 +40,7 @@ function renderSessions() {
 function renderFeed() {
   const exactRuns = (snapshot.agentRuns ?? []).filter((run) => run.exitCode === 0 && run.inheritedContext && run.response && run.response !== "OpenCode completed with no text response.");
   const messages = (snapshot.activity ?? []).filter((event) => event.type === "chat" && (event.value || event.detail));
-  const liveAgent = [...(snapshot.activity ?? [])].reverse().find((event) => ["agent-running", "agent-progress"].includes(event.type) && !(snapshot.agentRuns ?? []).some((run) => run.requestedBy === event.actor && new Date(run.completedAt) >= new Date(event.at)));
+  const liveAgent = liveAgentEvent();
   const started = liveAgent && [...(snapshot.activity ?? [])].reverse().find((event) => event.type === "agent-running" && event.actor === liveAgent.actor);
   liveAgentStartedAt = started?.at ?? liveAgent?.at ?? null;
   const liveHtml = liveAgent ? `<article class="event live-agent"><div class="avatar">↗</div><div class="bubble"><strong>${esc(cleanLabel(liveAgent.actor))}</strong><span class="inherited"><i class="live-dot"></i> Working now · <span id="live-elapsed">0s</span> · serialized through one Sailbox</span><div class="agent-response">${esc(liveAgent.detail)}</div><div class="live-track"><i></i></div></div></article>` : "";
@@ -48,6 +55,16 @@ function renderFeed() {
   if (timeline.length || liveHtml) { byId("feed").innerHTML = timeline.map((item) => item.html).join("") + liveHtml; return; }
   const event = snapshot.activity?.at(-1);
   byId("feed").innerHTML = event ? `<article class="event"><div class="avatar">${esc((event.actor || "R")[0])}</div><div class="bubble"><strong>${esc(event.actor || "Relay")}</strong><p>${esc(event.detail)}</p></div></article>` : "";
+}
+
+function renderTrace() {
+  const service = (event) => event.type === "checkpoint" ? "Sail" : event.type === "greptile" ? "Greptile" : event.type.startsWith("agent") ? "OpenCode" : "Relay";
+  const relevant = (snapshot.activity ?? []).filter((event) => ["checkpoint", "greptile", "agent-queued", "agent-running", "agent-progress", "agent-failed", "agent"].includes(event.type)).slice(-30);
+  const rows = relevant.map((event) => `<div class="trace-row ${["agent-running", "agent-progress"].includes(event.type) ? "live" : ""}"><time>${new Date(event.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</time><b>${service(event)}</b><span>${esc(event.detail)}</span></div>`);
+  if (snapshot.claudeMem?.lastRecallAt) rows.push(`<div class="trace-row"><time>${new Date(snapshot.claudeMem.lastRecallAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</time><b>Claude-Mem</b><span>${snapshot.claudeMem.observationIds.length} memory references supplied</span></div>`);
+  byId("live-trace").innerHTML = rows.length ? rows.join("") : '<div class="trace-row"><time>now</time><b>Relay</b><span>Waiting for host work</span></div>';
+  const trace = byId("live-trace");
+  trace.scrollTop = trace.scrollHeight;
 }
 
 function renderGreptile() {
@@ -69,7 +86,7 @@ function render(next) {
   byId("presence").innerHTML = snapshot.participants.map((p) => `<div class="avatar" style="background:${esc(p.color)}" title="${esc(p.name)} · ${esc(p.role)}">${esc(p.name[0])}</div>`).join("");
   if (!byId("composer").dataset.ready) { byId("composer").value = ""; byId("composer").dataset.ready = "true"; }
   const runs = snapshot.agentRuns ?? [];
-  const liveAgent = [...(snapshot.activity ?? [])].reverse().find((event) => ["agent-running", "agent-progress"].includes(event.type) && !runs.some((run) => run.requestedBy === event.actor && new Date(run.completedAt) >= new Date(event.at)));
+  const liveAgent = liveAgentEvent();
   const latestRun = runs.filter((run) => run.exitCode === 0 && run.response && run.response !== "OpenCode completed with no text response.").at(-1);
   byId("coordination-state").textContent = liveAgent ? `${cleanLabel(liveAgent.actor)} · working` : latestRun ? "1 agent continuation · 1 Sailbox" : "One serialized agent queue";
   byId("coordination-detail").textContent = liveAgent ? "Live host execution · next role waits in queue" : latestRun ? "Latest shared-stack continuation, preserved word for word" : `${snapshot.checkpoints.length} checkpoint${snapshot.checkpoints.length === 1 ? "" : "s"} · ready on host`;
@@ -78,7 +95,7 @@ function render(next) {
   const latestGreptile = snapshot.greptile?.samples?.at(-1) ?? { closed: 0, remaining: 0 };
   byId("greptile-pill").textContent = snapshot.repository.prNumber ? `Greptile · ${latestGreptile.closed} addressed · ${latestGreptile.remaining} open` : "Greptile · waiting for PR";
   document.querySelector(".conversation").classList.toggle("has-content", Boolean((snapshot.activity ?? []).length || (snapshot.agentRuns ?? []).length));
-  renderFeed(); renderGreptile(); remember();
+  renderFeed(); renderTrace(); renderGreptile(); remember();
   clearTimeout(memoryTimer); memoryTimer = setTimeout(recallMemory, 900);
 }
 

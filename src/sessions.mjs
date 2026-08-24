@@ -348,7 +348,14 @@ export class SessionService {
     const updated = await this.store.update(id, (record) => {
       record.agentRuns = [...(record.agentRuns ?? []), run];
       record.updatedAt = run.completedAt;
-      record.activity.push({ id: randomUUID(), type: "agent", actor: run.requestedBy, detail: `completed OpenCode session ${run.openCodeSessionId ?? run.id}`, at: run.completedAt, version: record.version });
+      record.activity.push({
+        id: randomUUID(),
+        type: run.exitCode === 0 ? "agent" : "agent-failed",
+        actor: run.requestedBy,
+        detail: run.exitCode === 0 ? `completed OpenCode session ${run.openCodeSessionId ?? run.id}` : `OpenCode exited with status ${run.exitCode}`,
+        at: run.completedAt,
+        version: record.version,
+      });
       return record;
     });
     const snapshot = this.snapshot(updated);

@@ -52,3 +52,12 @@ test("browser send path seals context before queuing the host agent", async () =
   assert.ok(checkpoint > 0);
   assert.ok(agentRun > checkpoint);
 });
+
+test("browser renders the host integration trace", async () => {
+  const [browser, page] = await Promise.all([
+    readFile(new URL("../public/greptile-demo.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/greptile-demo.html", import.meta.url), "utf8"),
+  ]);
+  assert.match(browser, /renderTrace/);
+  assert.match(page, /id="live-trace"/);
+});

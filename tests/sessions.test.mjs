@@ -65,6 +65,17 @@ test("chat activity retains exact collaborator text", async () => {
   assert.equal(session.activity.at(-1).value, "Add a replay guard");
 });
 
+test("failed agent runs terminate the live state truthfully", async () => {
+  const { service } = await fixture();
+  const created = await service.create({ title: "Failure", repository });
+  await service.addAgentRun(created.record.id, created.token, {
+    id: "failed-run", requestedBy: "Sanjana agent", completedAt: new Date().toISOString(), exitCode: 2,
+  });
+  const session = await service.get(created.record.id, created.token);
+  assert.equal(session.activity.at(-1).type, "agent-failed");
+  assert.match(session.activity.at(-1).detail, /status 2/);
+});
+
 test("Greptile metrics close only findings first observed open", async () => {
   let iteration = 0;
   const greptileClient = {
