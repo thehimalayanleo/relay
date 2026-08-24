@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypt
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { greptileComments } from "./improvement-loop.mjs";
+import { messagesFromSession, normalizeInboundMessage } from "./chat-bridge.mjs";
 
 const FIELDS = new Set(["problem", "constraint", "acceptance", "implementation"]);
 
@@ -49,6 +50,27 @@ function normalizeRepository(input = {}) {
     defaultBranch: text(input.defaultBranch, 120) || "main",
     branch: text(input.branch, 240),
     prNumber,
+  };
+}
+
+function normalizeMode(value, repository) {
+  if (["build", "decision"].includes(value)) return value;
+  return repository.remote === "github" ? "build" : "decision";
+}
+
+function normalizePeople(input = {}, mode = "decision") {
+  const people = input.people && typeof input.people === "object" ? input.people : {};
+  const creator = people.creator && typeof people.creator === "object" ? people.creator : {};
+  const collaborator = people.collaborator && typeof people.collaborator === "object" ? people.collaborator : {};
+  return {
+    creator: {
+      name: text(creator.name ?? input.creatorName, 80) || "Host",
+      role: text(creator.role, 80) || (mode === "build" ? "Builder" : "Partner"),
+    },
+    collaborator: {
+      name: text(collaborator.name ?? input.collaboratorName, 80) || "Partner",
+      role: text(collaborator.role, 80) || (mode === "build" ? "Collaborator" : "Partner"),
+    },
   };
 }
 
@@ -134,6 +156,9 @@ export class SessionService {
     const now = this.now();
     const ttlHours = Number(input.ttlHours ?? 72);
     if (!(ttlHours > 0 && ttlHours <= 168)) throw new TypeError("ttlHours must be between 0 and 168.");
+    const repository = normalizeRepository(input.repository);
+    const mode = normalizeMode(input.mode, repository);
+    const people = normalizePeople(input, mode);
     const record = {
       id: randomUUID(),
       title,
@@ -141,12 +166,19 @@ export class SessionService {
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
       expiresAt: new Date(now.getTime() + ttlHours * 3_600_000).toISOString(),
-      repository: normalizeRepository(input.repository),
+      repository,
+      mode,
+      people,
       version: 0,
-      brief: {
+      brief: mode === "decision" ? {
+        problem: title,
+        constraint: "Keep both people's preferences, budget, and tradeoffs explicit.",
+        acceptance: "Both people can see the same options and agree on a next step.",
+        implementation: "Collect both people's preferences before recommending a choice.",
+      } : {
         problem: title,
         constraint: "Preserve verified context and keep agent execution serialized.",
-        acceptance: "Both SWEs see the same state, evidence, and next action.",
+        acceptance: "Both collaborators see the same state, evidence, and next action.",
         implementation: "Review the shared brief, then queue the next safe action.",
       },
       activity: [],
@@ -170,10 +202,12 @@ export class SessionService {
 
   snapshot(record) {
     const { tokenHash: _tokenHash, ...safe } = record;
+    const mode = safe.mode ?? normalizeMode("", safe.repository);
+    const people = safe.people ?? normalizePeople({}, mode);
     const cutoff = this.now().getTime() - 30_000;
     const participants = [...(this.participants.get(record.id)?.values() ?? [])]
       .filter((person) => new Date(person.lastSeenAt).getTime() >= cutoff);
-    return { ...safe, participants, activity: safe.activity.slice(-50) };
+    return { ...safe, mode, people, participants, activity: safe.activity.slice(-50) };
   }
 
   async get(id, token) {
@@ -239,6 +273,38 @@ export class SessionService {
     });
     this.broadcast(id, "activity", this.snapshot(updated));
     return event;
+  }
+
+  async addMessage(id, token, input = {}) {
+    this.assertReadable(await this.store.get(id), token);
+    const incoming = normalizeInboundMessage(input, this.now());
+    let message = incoming;
+    let deduplicated = false;
+    const updated = await this.store.update(id, (record) => {
+      const sourceId = incoming.source.messageId;
+      const existing = sourceId && record.activity.find((event) => event.type === "chat"
+        && event.source?.platform === incoming.source.platform
+        && event.source?.messageId === sourceId);
+      if (existing) {
+        message = existing;
+        deduplicated = true;
+        return record;
+      }
+      message.version = record.version + 1;
+      record.brief.implementation = incoming.value;
+      record.version += 1;
+      record.updatedAt = incoming.at;
+      record.activity.push(message);
+      return record;
+    });
+    const snapshot = this.snapshot(updated);
+    if (!deduplicated) this.broadcast(id, "activity", snapshot);
+    return { message, snapshot, deduplicated };
+  }
+
+  async listMessages(id, token) {
+    const record = this.assertReadable(await this.store.get(id), token);
+    return { sessionId: id, messages: messagesFromSession(record) };
   }
 
   async remember(id, token, observationIds = []) {
@@ -352,7 +418,9 @@ export class SessionService {
         id: randomUUID(),
         type: run.exitCode === 0 ? "agent" : "agent-failed",
         actor: run.requestedBy,
-        detail: run.exitCode === 0 ? `completed OpenCode session ${run.openCodeSessionId ?? run.id}` : `OpenCode exited with status ${run.exitCode}`,
+        detail: run.exitCode === 0
+          ? record.mode === "decision" ? "shared assistant replied" : `completed OpenCode session ${run.openCodeSessionId ?? run.id}`
+          : record.mode === "decision" ? `shared assistant failed with status ${run.exitCode}` : `OpenCode exited with status ${run.exitCode}`,
         at: run.completedAt,
         version: record.version,
       });
@@ -380,4 +448,4 @@ export class SessionService {
   }
 }
 
-export const sessionInternals = { tokenHash, safeTokenMatch, normalizeRepository };
+export const sessionInternals = { tokenHash, safeTokenMatch, normalizeRepository, normalizeMode, normalizePeople };

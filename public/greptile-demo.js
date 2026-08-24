@@ -23,7 +23,20 @@ const cleanLabel = (value) => String(value ?? "Agent").replace(/^\*\*|\*\*$/g, "
 async function json(response) { const body = await response.json(); if (!response.ok) throw new Error(body.message ?? body.error ?? `HTTP ${response.status}`); return body; }
 const authHeaders = (extra = {}) => ({ authorization: `Bearer ${active.token}`, ...extra });
 function fromHash() { const p = new URLSearchParams(location.hash.slice(1)); const requestedRole = p.get("role"); const role = ["pm", "collaborator", "agent"].includes(requestedRole) ? requestedRole : "swe"; return p.get("session") && p.get("token") ? { id: p.get("session"), token: p.get("token"), role } : null; }
-function person() { if (active.role === "agent") return { id: `relay-agent-${active.id}`, name: "Relay agent", role: "Standalone", color: "#ff5a1f" }; return ["pm", "collaborator"].includes(active.role) ? { id: `sanjana-swe-${active.id}`, name: "Sanjana", role: "SWE", color: "#ff5a1f" } : { id: `ajinkya-swe-${active.id}`, name: "Ajinkya", role: "SWE", color: "#7aa2f7" }; }
+function collaboratorView() { return ["pm", "collaborator"].includes(active?.role); }
+function profileKey() { return `relay.profile.${active?.role ?? "swe"}`; }
+function person() {
+  if (active.role === "agent") return { id: `relay-agent-${active.id}`, name: "Relay agent", role: "Standalone", color: "#ff5a1f" };
+  const side = collaboratorView() ? snapshot?.people?.collaborator : snapshot?.people?.creator;
+  const savedName = localStorage.getItem(profileKey());
+  const name = savedName || side?.name || (collaboratorView() ? "Partner" : "Host");
+  return {
+    id: `${collaboratorView() ? "collaborator" : "host"}-${active.id}`,
+    name,
+    role: side?.role || (snapshot?.mode === "build" ? (collaboratorView() ? "Collaborator" : "Builder") : "Partner"),
+    color: collaboratorView() ? "#ff5a1f" : "#7aa2f7",
+  };
+}
 function recents() { try { return JSON.parse(localStorage.getItem(RECENTS_KEY) ?? "[]"); } catch { return []; } }
 function remember() {
   const item = { ...active, title: snapshot.title, updatedAt: snapshot.updatedAt };
@@ -54,9 +67,12 @@ function renderRepository() {
   if (!snapshot) return;
   const repository = snapshot.repository ?? {};
   const github = repository.remote === "github";
-  byId("repo-mark").textContent = github ? "GH" : "LOCAL";
-  byId("repo-label").textContent = github ? "Connected repository" : "Workspace";
-  byId("repo-connection").textContent = repository.remote === "github"
+  const decisionMode = snapshot.mode === "decision";
+  byId("repo-mark").textContent = decisionMode ? "↗" : github ? "GH" : "LOCAL";
+  byId("repo-label").textContent = decisionMode ? "Shared decision" : github ? "Connected repository" : "Workspace";
+  byId("repo-connection").textContent = decisionMode
+    ? snapshot.title
+    : repository.remote === "github"
     ? `${repository.name}${repository.prNumber ? ` / pull ${repository.prNumber}` : ""}`
     : repository.name || "Local workspace";
   let stage = greptileUiStage;
@@ -65,7 +81,8 @@ function renderRepository() {
     const latest = samples.at(-1);
     const reviewRequested = [...(snapshot.activity ?? [])].reverse().find((event) => event.type === "greptile" && /review requested/i.test(event.detail));
     const requestPending = reviewRequested && (!snapshot.greptile?.lastSyncAt || new Date(reviewRequested.at) > new Date(snapshot.greptile.lastSyncAt));
-    stage = repository.remote !== "github" ? { label: "Local workspace", state: "ready" }
+    stage = decisionMode ? { label: "Shared agent ready", state: "ready" }
+      : repository.remote !== "github" ? { label: "Local workspace", state: "ready" }
       : !repository.prNumber ? { label: "Waiting for pull request", state: "ready" }
       : requestPending ? { label: "Review requested", state: "busy" }
       : latest?.opened === 0 && samples.length ? { label: "Review passed", state: "ready" }
@@ -96,14 +113,16 @@ function renderFeed() {
   const liveAgent = liveAgentEvent();
   const started = liveAgent && [...(snapshot.activity ?? [])].reverse().find((event) => event.type === "agent-running" && event.actor === liveAgent.actor);
   liveAgentStartedAt = started?.at ?? liveAgent?.at ?? null;
-  const liveHtml = liveAgent ? `<article class="event live-agent"><div class="avatar">↗</div><div class="bubble"><strong>${esc(cleanLabel(liveAgent.actor))}</strong><span class="inherited"><i class="live-dot"></i> Working now · <span id="live-elapsed">0s</span> · serialized through one Sailbox</span><div class="agent-response">${esc(liveAgent.detail)}</div><div class="live-track"><i></i></div></div></article>` : "";
+  const liveHtml = liveAgent ? `<article class="event live-agent"><div class="avatar">↗</div><div class="bubble"><strong>${esc(cleanLabel(liveAgent.actor))}</strong><span class="inherited"><i class="live-dot"></i> Working now · <span id="live-elapsed">0s</span> · ${snapshot.mode === "decision" ? "shared with this thread" : "serialized through one Sailbox"}</span><div class="agent-response">${esc(liveAgent.detail)}</div><div class="live-track"><i></i></div></div></article>` : "";
   const timeline = [
-    ...messages.map((event) => ({ at: event.at, html: `<article class="event"><div class="avatar">${esc((event.actor || "R")[0])}</div><div class="bubble"><strong>${esc(event.actor || "Relay")} · SWE</strong><time>${new Date(event.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time><span class="inherited">Added to the shared agent stack</span><div class="agent-response">${esc(event.value || event.detail)}</div></div></article>` })),
+    ...messages.map((event) => ({ at: event.at, html: `<article class="event"><div class="avatar">${esc((event.actor || "R")[0])}</div><div class="bubble"><strong>${esc(event.actor || "Relay")}${event.actorRole ? ` · ${esc(event.actorRole)}` : ""}</strong><time>${new Date(event.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time><span class="inherited">Shared with everyone in this thread</span><div class="agent-response">${esc(event.value || event.detail)}</div></div></article>` })),
     ...exactRuns.map((run) => {
       const participant = cleanLabel(run.requestedBy);
-      const inherited = `Problem: ${run.inheritedContext.problem}\nConstraint: ${run.inheritedContext.constraint}\nNext: ${run.inheritedContext.nextAction}`;
+      const inherited = snapshot.mode === "decision"
+        ? `Goal: ${run.inheritedContext.problem}\nShared constraint: ${run.inheritedContext.constraint}\nLatest request: ${run.inheritedContext.nextAction}`
+        : `Problem: ${run.inheritedContext.problem}\nConstraint: ${run.inheritedContext.constraint}\nNext: ${run.inheritedContext.nextAction}`;
       const escalation = run.escalation ? `<span class="inherited">Escalated once · ${esc(run.escalation.greptileEvidence.length)} Greptile finding${run.escalation.greptileEvidence.length === 1 ? "" : "s"} · checkpoint preserved</span>` : "";
-      return { at: run.completedAt, html: `<article class="event"><div class="avatar">${esc(participant[0])}</div><div class="bubble"><strong>${esc(participant)}</strong><time>${new Date(run.completedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time><span class="inherited">Completed through the serialized host queue</span>${escalation}<div class="agent-response formatted">${formatAgentText(run.response)}</div><details class="run-context"><summary>Inherited context</summary><div class="agent-response">${esc(inherited)}</div></details></div></article>` };
+      return { at: run.completedAt, html: `<article class="event"><div class="avatar">${esc(participant[0])}</div><div class="bubble"><strong>${esc(participant)}</strong><time>${new Date(run.completedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time><span class="inherited">${snapshot.mode === "decision" ? "Replied to the shared conversation" : "Completed through the serialized host queue"}</span>${escalation}<div class="agent-response formatted">${formatAgentText(run.response)}</div><details class="run-context"><summary>${snapshot.mode === "decision" ? "Decision context" : "Inherited context"}</summary><div class="agent-response">${esc(inherited)}</div></details></div></article>` };
     }),
   ].sort((a, b) => new Date(a.at) - new Date(b.at));
   if (timeline.length || liveHtml) { byId("feed").innerHTML = timeline.map((item) => item.html).join("") + liveHtml; return; }
@@ -112,10 +131,10 @@ function renderFeed() {
 }
 
 function renderTrace() {
-  const service = (event) => event.type === "checkpoint" ? "Sail" : event.type === "greptile" ? "Greptile" : event.type.startsWith("agent") ? "OpenCode" : "Relay";
+  const service = (event) => event.type === "checkpoint" ? "Relay" : event.type === "greptile" ? "Greptile" : event.type.startsWith("agent") ? (snapshot.mode === "decision" ? "Agent" : "OpenCode") : "Relay";
   const relevant = (snapshot.activity ?? []).filter((event) => ["checkpoint", "greptile", "agent-queued", "agent-running", "agent-progress", "agent-escalation", "agent-failed", "agent"].includes(event.type)).slice(-30);
   const rows = relevant.map((event) => `<div class="trace-row ${["agent-running", "agent-progress"].includes(event.type) ? "live" : ""}"><time>${new Date(event.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</time><b>${service(event)}</b><span>${esc(compactTraceText(event.detail))}</span></div>`);
-  if (liveAgentEvent()) rows.push('<div class="trace-row live"><time>live</time><b>OpenCode</b><span id="trace-heartbeat">Model connected · waiting for the next thinking, tool, or text event</span></div>');
+  if (liveAgentEvent()) rows.push(`<div class="trace-row live"><time>live</time><b>${snapshot.mode === "decision" ? "Agent" : "OpenCode"}</b><span id="trace-heartbeat">Model connected · waiting for the next update</span></div>`);
   if (snapshot.claudeMem?.lastRecallAt) rows.push(`<div class="trace-row"><time>${new Date(snapshot.claudeMem.lastRecallAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</time><b>Claude-Mem</b><span>${snapshot.claudeMem.observationIds.length} memory references supplied</span></div>`);
   byId("live-trace").innerHTML = rows.length ? rows.join("") : '<div class="trace-row"><time>now</time><b>Relay</b><span>Waiting for host work</span></div>';
   const trace = byId("live-trace");
@@ -144,23 +163,29 @@ function renderGreptile() {
 function render(next) {
   snapshot = { ...next, links: next.links ?? snapshot?.links, hostIntegrations: next.hostIntegrations ?? snapshot?.hostIntegrations };
   byId("session-title-view").textContent = snapshot.title;
+  const decisionMode = snapshot.mode === "decision";
+  const current = person();
   byId("session-subtitle").textContent = snapshot.repository.remote === "github"
     ? `${snapshot.repository.name}${snapshot.repository.prNumber ? ` · PR #${snapshot.repository.prNumber}` : " · no pull request"} · v${snapshot.version}`
-    : `Local session · GitHub optional · v${snapshot.version}`;
+    : decisionMode ? `${snapshot.people.creator.name} + ${snapshot.people.collaborator.name} · shared decision · v${snapshot.version}` : `Local session · GitHub optional · v${snapshot.version}`;
+  byId("profile-button").textContent = current.name[0]?.toUpperCase() || "?";
   byId("presence").innerHTML = snapshot.participants.map((p) => `<div class="avatar" style="background:${esc(p.color)}" title="${esc(p.name)} · ${esc(p.role)}">${esc(p.name[0])}</div>`).join("");
   if (!byId("composer").dataset.ready) { byId("composer").value = ""; byId("composer").dataset.ready = "true"; }
   const runs = snapshot.agentRuns ?? [];
   const liveAgent = liveAgentEvent();
   const latestRun = runs.filter((run) => run.exitCode === 0 && run.response && run.response !== "OpenCode completed with no text response.").at(-1);
-  byId("coordination-state").textContent = liveAgent ? `${cleanLabel(liveAgent.actor)} · working` : latestRun ? "1 agent continuation · 1 Sailbox" : "One serialized agent queue";
-  byId("coordination-detail").textContent = liveAgent ? "Live host execution · next role waits in queue" : latestRun ? "Latest shared-stack continuation, preserved word for word" : `${snapshot.checkpoints.length} checkpoint${snapshot.checkpoints.length === 1 ? "" : "s"} · ready on host`;
-  byId("host-mode").textContent = active.role === "agent" ? "Standalone agent mode" : ["pm", "collaborator"].includes(active.role) ? "Connected as Sanjana · SWE" : "Host integrations ready";
-  byId("host-help").textContent = active.role === "agent" ? "Runs without either browser open" : ["pm", "collaborator"].includes(active.role) ? "No local keys required" : "Powered by host integrations";
+  byId("coordination-state").textContent = liveAgent ? `${cleanLabel(liveAgent.actor)} · working` : decisionMode && latestRun ? "Shared agent replied" : decisionMode ? "One shared decision thread" : latestRun ? "1 agent continuation · 1 Sailbox" : "One serialized agent queue";
+  byId("coordination-detail").textContent = liveAgent ? "Live host execution · the next request waits in queue" : decisionMode ? "Both people and the agent see the same conversation" : latestRun ? "Latest shared-stack continuation, preserved word for word" : `${snapshot.checkpoints.length} checkpoint${snapshot.checkpoints.length === 1 ? "" : "s"} · ready on host`;
+  byId("host-mode").textContent = active.role === "agent" ? "Standalone agent mode" : collaboratorView() ? `Connected as ${current.name}` : "Host integrations ready";
+  byId("host-help").textContent = active.role === "agent" ? "Runs without either browser open" : collaboratorView() ? "No local keys required" : "Powered by host integrations";
   byId("preview-session").href = snapshot.links?.collaboratorInviteUrl ?? snapshot.links?.pmInviteUrl ?? "#";
+  byId("preview-session").textContent = `Preview as ${snapshot.people.collaborator.name}`;
+  byId("activity-sources").textContent = decisionMode ? "Agent · memory · Relay checkpoint" : "OpenCode · Sail · Greptile · Claude-Mem";
+  byId("composer").placeholder = decisionMode ? "Add a preference, constraint, or question…" : "Add context or direct the shared agent…";
   const greptileSamples = snapshot.greptile?.samples ?? [];
   const latestGreptile = snapshot.greptile?.samples?.at(-1) ?? { closed: 0, remaining: 0 };
-  byId("greptile-panel").hidden = !snapshot.repository.prNumber;
-  byId("greptile-pill").hidden = !snapshot.repository.prNumber;
+  byId("greptile-panel").hidden = decisionMode || !snapshot.repository.prNumber;
+  byId("greptile-pill").hidden = decisionMode || !snapshot.repository.prNumber;
   byId("greptile-pill").textContent = !snapshot.repository.prNumber
     ? "Greptile · waiting for PR"
     : greptileSamples.length && latestGreptile.opened === 0
@@ -180,7 +205,12 @@ async function connect(session) {
   stream = new EventSource(`/v1/sessions/${active.id}/events?token=${encodeURIComponent(active.token)}`);
   for (const name of ["workspace", "presence", "activity", "memory", "checkpoint", "greptile", "agent-queue"]) stream.addEventListener(name, (event) => render(JSON.parse(event.data)));
   stream.onerror = () => status("Reconnecting to the shared workspace…");
-  status(["pm", "collaborator"].includes(active.role) ? "You are in Ajinkya’s live workspace. No setup required." : `Session ready · invite expires ${new Date(snapshot.expiresAt).toLocaleString()}`);
+  status(collaboratorView() ? `You are in ${snapshot.people.creator.name}'s live workspace. No setup required.` : `Session ready · invite expires ${new Date(snapshot.expiresAt).toLocaleString()}`);
+  if (collaboratorView() && !localStorage.getItem(profileKey())) {
+    byId("profile-name").value = snapshot.people.collaborator.name === "Partner" ? "" : snapshot.people.collaborator.name;
+    byId("profile-dialog").showModal();
+    byId("profile-name").focus();
+  }
   if (snapshot.repository.prNumber && !syncedSessions.has(active.id)) {
     syncedSessions.add(active.id);
     syncGreptile().then((metrics) => metrics && status(`Greptile review ${metrics.iteration} synced.`)).catch(() => {});
@@ -196,20 +226,29 @@ async function submitMessage() {
   if (!value || byId("send").disabled) return;
   byId("send").disabled = true;
   try {
-    await updateField("implementation", value);
-    await json(await fetch(`/v1/sessions/${active.id}/activity`, { method: "POST", headers: authHeaders({ "content-type": "application/json" }), body: JSON.stringify({ type: "chat", actor: person().name, detail: value, value }) }));
+    const author = person();
+    const result = await json(await fetch(`/v1/sessions/${active.id}/messages`, {
+      method: "POST",
+      headers: authHeaders({ "content-type": "application/json" }),
+      body: JSON.stringify({
+        sender: { name: author.name, role: author.role },
+        text: value,
+        source: { platform: "web", threadId: active.id, messageId: crypto.randomUUID() },
+      }),
+    }));
+    render(result.snapshot);
     byId("composer").value = "";
     status("Saved. Sealing context for the host agent…");
     await json(await fetch(`/v1/sessions/${active.id}/checkpoints`, { method: "POST", headers: authHeaders({ "content-type": "application/json" }), body: JSON.stringify({ actor: person().name }) }));
     status("Agent continuation queued on the host.");
-    const requestedBy = `${person().name} agent · ${person().role}`;
-    if (snapshot.repository.prNumber) {
+    const requestedBy = snapshot.mode === "decision" ? "Relay · shared assistant" : `${author.name} agent · ${author.role}`;
+    if (snapshot.mode === "build" && snapshot.repository.prNumber) {
       greptileUiStage = { label: "Requesting review", state: "busy" }; renderRepository();
       fetch(`/v1/sessions/${active.id}/greptile/review`, { method: "POST", headers: authHeaders() })
         .then(json).then(() => { greptileUiStage = { label: "Review running", state: "busy" }; renderRepository(); byId("greptile-pill").textContent = "Greptile · review running"; syncGreptile(6).catch(() => {}); })
         .catch((error) => { greptileUiStage = { label: error.message.includes("not found") ? "Repository not indexed" : "Review unavailable", state: "error" }; renderRepository(); byId("greptile-pill").textContent = `Greptile · ${error.message.includes("not found") ? "PR not indexed" : "review unavailable"}`; });
     }
-    fetch(`/v1/sessions/${active.id}/agent/run`, { method: "POST", headers: authHeaders({ "content-type": "application/json" }), body: JSON.stringify({ target: "opencode", requestedBy, instructions: value }) })
+    fetch(`/v1/sessions/${active.id}/agent/run`, { method: "POST", headers: authHeaders({ "content-type": "application/json" }), body: JSON.stringify({ target: snapshot.mode === "decision" ? "generic" : "opencode", requestedBy, instructions: value }) })
       .then(json).then(() => { status("Host agent completed. Full response preserved above."); syncGreptile(3).catch(() => {}); }).catch((error) => status(`Agent failed: ${error.message}`));
   } catch (error) { status(error.message); }
   finally { byId("send").disabled = false; }
@@ -232,7 +271,26 @@ async function recallMemory() {
   } catch { byId("memory-pill").textContent = "Claude-Mem · optional"; }
 }
 
-byId("invite-session").onclick = async () => { if (!snapshot) return; await navigator.clipboard.writeText(snapshot.links?.collaboratorInviteUrl ?? snapshot.links?.pmInviteUrl ?? active.inviteUrl); status("Invite copied. Sanjana only needs the link."); };
+byId("invite-session").onclick = async () => { if (!snapshot) return; await navigator.clipboard.writeText(snapshot.links?.collaboratorInviteUrl ?? snapshot.links?.pmInviteUrl ?? active.inviteUrl); status("Invite copied. Your collaborator only needs the link."); };
+
+const profileDialog = byId("profile-dialog");
+byId("profile-button").onclick = () => {
+  byId("profile-name").value = person().name;
+  profileDialog.showModal();
+  byId("profile-name").select();
+};
+byId("close-profile").onclick = () => profileDialog.close();
+byId("profile-form").onsubmit = async (event) => {
+  event.preventDefault();
+  const name = byId("profile-name").value.trim();
+  if (!name) return;
+  localStorage.setItem(profileKey(), name);
+  profileDialog.close();
+  if (active) {
+    render(await json(await fetch(`/v1/sessions/${active.id}/join`, { method: "POST", headers: authHeaders({ "content-type": "application/json" }), body: JSON.stringify(person()) })));
+    status(`Connected as ${name}.`);
+  }
+};
 
 const dialog = byId("session-dialog");
 function setSessionAction() {
@@ -280,7 +338,15 @@ async function discoverWorkspaces() {
 }
 async function createSession(repository) {
   const target = repository ?? { name: "Local workspace", remote: "local", defaultBranch: "", prNumber: null };
-  const created = await json(await fetch("/v1/sessions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ title: byId("session-title").value, creatorRole: "swe", repository: target }) }));
+  const mode = repository ? "build" : "decision";
+  const created = await json(await fetch("/v1/sessions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({
+    title: byId("session-title").value,
+    mode,
+    creatorRole: mode === "build" ? "swe" : "host",
+    creatorName: localStorage.getItem("relay.profile.swe") || "Host",
+    collaboratorName: "Partner",
+    repository: target,
+  }) }));
   history.replaceState(null, "", new URL(created.creatorUrl).hash); dialog.close();
   try { await connect(fromHash()); }
   catch { location.assign(created.creatorUrl); }

@@ -15,7 +15,9 @@ Usage:
   relay serve [--host HOST] [--port PORT] [--public-url URL]
   relay configure
   relay sail deploy --title TEXT [--repo OWNER/REPO --pr NUMBER] [--port 4319] [--with-provider-keys]
-  relay session create --title TEXT --repo OWNER/REPO --pr NUMBER [--server URL]
+  relay session create --title TEXT [--mode decision|build] [--repo OWNER/REPO --pr NUMBER] [--creator NAME] [--collaborator NAME] [--server URL]
+  relay session message <session-link> --text TEXT [--actor NAME] [--role ROLE] [--platform NAME] [--message-id ID]
+  relay session messages <session-link>
   relay arc run --repo-path PATH [--builder-burst 10] [--cycles 1] [--server URL]
   relay doctor [--server URL]
   relay handoff [notes.txt|-] --goal TEXT --next TEXT [--to TARGET] [--from HARNESS] [--pod] [--quiet]
@@ -129,6 +131,16 @@ function endpointFromShareUrl(shareUrl, suffix = "") {
   const token = parsed.searchParams.get("token") ?? fragment.get("token");
   if (!id || !token) throw new Error("Share URL must include id and token.");
   return { origin: parsed.origin, id, url: `${parsed.origin}/v1/relays/${id}${suffix}`, token };
+}
+
+function sessionEndpointFromShareUrl(shareUrl, suffix = "") {
+  if (!shareUrl) throw new Error("Provide a Relay session link.");
+  const parsed = new URL(shareUrl);
+  const fragment = new URLSearchParams(parsed.hash.replace(/^#/, ""));
+  const id = parsed.searchParams.get("session") ?? fragment.get("session");
+  const token = parsed.searchParams.get("token") ?? fragment.get("token");
+  if (!id || !token) throw new Error("Session link must include session and token.");
+  return { origin: parsed.origin, id, url: `${parsed.origin}/v1/sessions/${id}${suffix}`, token };
 }
 
 async function jsonRequest(url, init = {}) {
@@ -266,19 +278,59 @@ async function main() {
   if (command === "session" && process.argv[3] === "create") {
     const title = option("--title");
     const repo = option("--repo");
-    const prNumber = Number(option("--pr"));
+    const prValue = option("--pr");
+    const prNumber = prValue ? Number(prValue) : null;
+    const mode = option("--mode", repo ? "build" : "decision");
     if (!title) throw new Error("session create requires --title.");
-    if (!repo || !repo.includes("/")) throw new Error("session create requires --repo OWNER/REPO.");
-    if (!Number.isInteger(prNumber) || prNumber <= 0) throw new Error("session create requires a positive --pr number.");
+    if (!['decision', 'build'].includes(mode)) throw new Error("--mode must be decision or build.");
+    if (repo && !repo.includes("/")) throw new Error("--repo must be OWNER/REPO.");
+    if (prValue && (!Number.isInteger(prNumber) || prNumber <= 0)) throw new Error("--pr must be a positive number.");
+    if (prValue && !repo) throw new Error("--pr requires --repo OWNER/REPO.");
+    const repository = repo
+      ? { name: repo, prNumber, remote: "github", defaultBranch: option("--default-branch", "main") }
+      : { name: "Local workspace", prNumber: null, remote: "local", defaultBranch: "" };
     const created = await jsonRequest(`${server}/v1/sessions`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ title, creatorRole: "swe", repository: { name: repo, prNumber, remote: "github", defaultBranch: option("--default-branch", "main") } }),
+      body: JSON.stringify({
+        title,
+        mode,
+        creatorRole: mode === "build" ? "swe" : "host",
+        creatorName: option("--creator", "Host"),
+        collaboratorName: option("--collaborator", "Partner"),
+        repository,
+      }),
     });
     console.log("Relay session ready");
     console.log(`Host:   ${created.hostWorkspaceUrl ?? created.creatorUrl}`);
     console.log(`Invite: ${created.collaboratorInviteUrl ?? created.pmInviteUrl}`);
     console.log(`Expires: ${created.expiresAt}`);
+    return;
+  }
+
+  if (command === "session" && process.argv[3] === "message") {
+    const endpoint = sessionEndpointFromShareUrl(process.argv[4], "/messages");
+    const message = option("--text");
+    if (!message) throw new Error("session message requires --text.");
+    writeJson(await jsonRequest(endpoint.url, {
+      method: "POST",
+      headers: { authorization: `Bearer ${endpoint.token}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        sender: { name: option("--actor", "Collaborator"), role: option("--role", "Participant") },
+        text: message,
+        source: {
+          platform: option("--platform", "cli"),
+          threadId: endpoint.id,
+          messageId: option("--message-id", ""),
+        },
+      }),
+    }));
+    return;
+  }
+
+  if (command === "session" && process.argv[3] === "messages") {
+    const endpoint = sessionEndpointFromShareUrl(process.argv[4], "/messages");
+    writeJson(await jsonRequest(endpoint.url, authorized(endpoint)));
     return;
   }
 

@@ -14,11 +14,15 @@ The initial wedge is shift changes and cross-team ownership transfers during pro
 
 Relay is a small, vendor-neutral continuation protocol. It sends a verified checkpoint and an acceptance receipt instead of treating a chat transcript as executable state.
 
+Relay also supports ordinary shared decisions. Start a private thread such as choosing a mattress, invite your partner with one link, and let the host-side assistant keep both people's preferences, budget, and tradeoffs in the same conversation. GitHub and Greptile stay hidden unless the session is attached to a software workspace.
+
 The current release is a local or trusted-network prototype. It has no user accounts. Every relay gets a random 256-bit capability URL, expires after 72 hours by default, and is stored as a private local JSON file. Put it behind an authenticated gateway before exposing it to the public internet.
 
 ## What works
 
 - Persistent capability-scoped sessions with PM/SWE presence, synchronized briefs, and a common agent activity stream.
+- Personal decision sessions with named participants, one shared conversation, and a decision-aware assistant prompt.
+- A normalized, deduplicated chat endpoint for browser, CLI, iMessage bridges, and other adapters.
 - Browser-local recent-session switching, one-click PM invitations, and 72-hour capability expiry.
 - Goal-first workspace discovery from the host's Greptile-indexed pull requests, plus immediate local sessions that can connect GitHub later.
 - Session-specific Greptile timelines that distinguish closed, remaining, and unknown findings without crediting disappearance as resolution.
@@ -100,6 +104,8 @@ POST /v1/sessions
 GET  /v1/sessions/:id
 POST /v1/sessions/:id/join
 POST /v1/sessions/:id/brief
+GET  /v1/sessions/:id/messages
+POST /v1/sessions/:id/messages
 GET  /v1/sessions/:id/events
 POST /v1/sessions/:id/greptile/sync
 GET  /v1/sessions/:id/metrics
@@ -137,6 +143,18 @@ Create and print a shared session from the host terminal:
 ```bash
 relay session create --title "Fix checkout retries" --repo OWNER/REPO --pr 42
 ```
+
+Start a shared personal decision without GitHub:
+
+```bash
+relay session create \
+  --title "Choose a mattress together" \
+  --mode decision \
+  --creator "Alex" \
+  --collaborator "Sam"
+```
+
+The printed invite opens the same browser thread for the second person. Both can press Enter to send, and Shift Enter adds a new line. The shared agent runs on the host's serialized queue.
 
 `--public-url` controls the collaborator-facing invitation. It should be the trusted LAN or Tailscale address that reaches the host. Relay still prints a separate localhost workspace for the host. When binding to `0.0.0.0` without `--public-url`, Relay warns instead of silently advertising localhost to collaborators.
 
@@ -230,6 +248,15 @@ node bin/relay.mjs pull '<share-url>' --target claude
 ```
 
 Run `node bin/relay.mjs --help` for the lower-level `create`, `get`, `pod`, `render`, `accept`, and `cost` verbs.
+
+Chat adapters can post into the same session without learning provider credentials:
+
+```bash
+relay session message '<session-link>' --actor Sam --role Partner --platform imessage --message-id message-7 --text 'Motion isolation matters to me.'
+relay session messages '<session-link>'
+```
+
+See [`docs/CHAT_BRIDGE.md`](./docs/CHAT_BRIDGE.md) for the normalized adapter contract and the honest boundary for a future native iMessage extension.
 
 Terminate the remote work pod when the work is finished:
 

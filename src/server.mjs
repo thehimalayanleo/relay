@@ -157,14 +157,20 @@ function receiptFrom(body, record, now = new Date()) {
 
 function checkpointCapsule(session) {
   const metrics = session.greptile.samples.at(-1) ?? { opened: 0, closed: 0, remaining: 0, unknown: 0 };
+  const decisionMode = session.mode === "decision";
+  const messageCount = (session.activity ?? []).filter((event) => event.type === "chat").length;
   return {
     title: session.title,
     goal: session.brief.problem || session.title,
     acceptanceCriteria: [session.brief.acceptance].filter(Boolean),
     state: {
-      completed: [`Greptile findings closed during this session: ${metrics.closed}`],
-      partial: [`Greptile findings remaining: ${metrics.remaining}`, `Shared brief version: ${session.version}`],
-      blocked: metrics.unknown ? [`${metrics.unknown} Greptile finding(s) have unknown status.`] : [],
+      completed: decisionMode
+        ? [`Shared messages preserved: ${messageCount}`]
+        : [`Greptile findings closed during this session: ${metrics.closed}`],
+      partial: decisionMode
+        ? [`Shared decision version: ${session.version}`]
+        : [`Greptile findings remaining: ${metrics.remaining}`, `Shared brief version: ${session.version}`],
+      blocked: !decisionMode && metrics.unknown ? [`${metrics.unknown} Greptile finding(s) have unknown status.`] : [],
     },
     decisions: [],
     constraints: [session.brief.constraint].filter(Boolean),
@@ -182,9 +188,30 @@ function checkpointCapsule(session) {
       greptile: metrics, claudeMemObservationIds: session.claudeMem.observationIds,
     }),
     nextAction: session.brief.implementation || "Review the shared brief and perform the next verified action.",
-    source: { harness: "relay-session", actor: "PM + SWE", taskId: session.id },
+    source: { harness: "relay-session", actor: decisionMode ? "Shared decision participants" : "Collaborators", taskId: session.id },
     intendedRecipient: "shared-agent-queue",
   };
+}
+
+function decisionAgentPrompt(session, roleInstructions) {
+  const conversation = (session.activity ?? [])
+    .filter((event) => event.type === "chat" && (event.value || event.detail))
+    .slice(-24)
+    .map((event) => `${event.actor || "Participant"}: ${event.value || event.detail}`)
+    .join("\n");
+  return `You are Relay, a shared assistant helping two people make a practical decision together.
+
+Shared goal: ${session.brief.problem || session.title}
+Known constraint: ${session.brief.constraint}
+Agreement target: ${session.brief.acceptance}
+
+Conversation so far:
+${conversation || "No messages have been added yet."}
+
+Respond conversationally to the latest request. Make each person's known preferences explicit, compare concrete tradeoffs, and give one useful next step. Ask at most one high-value question if essential information is missing. Do not mention checkpoints, repositories, code, or internal agent machinery. Do not claim both people agree unless both have said so.
+Use short paragraphs and bullets. Do not use a Markdown table.
+
+Latest request: ${roleInstructions || session.brief.implementation}`;
 }
 
 export async function createRelayServer(options = {}) {
@@ -381,6 +408,18 @@ export async function createRelayServer(options = {}) {
         return;
       }
 
+      const sessionMessagesMatch = url.pathname.match(/^\/v1\/sessions\/([0-9a-f-]{36})\/messages$/i);
+      if (request.method === "GET" && sessionMessagesMatch) {
+        sessionRateLimiter.check(sessionMessagesMatch[1]);
+        sendJson(response, 200, await sessions.listMessages(sessionMessagesMatch[1], requestToken(request, url)));
+        return;
+      }
+      if (request.method === "POST" && sessionMessagesMatch) {
+        sessionRateLimiter.check(sessionMessagesMatch[1]);
+        sendJson(response, 201, await sessions.addMessage(sessionMessagesMatch[1], requestToken(request, url), await readJson(request)));
+        return;
+      }
+
       const sessionMemoryMatch = url.pathname.match(/^\/v1\/sessions\/([0-9a-f-]{36})\/memory$/i);
       if (request.method === "POST" && sessionMemoryMatch) {
         sessionRateLimiter.check(sessionMemoryMatch[1], 2);
@@ -474,21 +513,25 @@ export async function createRelayServer(options = {}) {
         }
         const target = typeof body.target === "string" ? body.target : "generic";
         if (!SUPPORTED_TARGETS.includes(target)) throw new Error(`Unsupported target: ${target}`);
-        const rendered = renderPrompt(record, target);
         const roleInstructions = typeof body.instructions === "string" ? body.instructions.trim().slice(0, 20_000) : "";
+        const rendered = session.mode === "decision"
+          ? decisionAgentPrompt(session, roleInstructions)
+          : renderPrompt(record, target);
         const priorResponse = [...(session.agentRuns ?? [])].reverse().find((run) => run.exitCode === 0 && run.response)?.response ?? "";
-        const basePrompt = body.demo === true
+        const basePrompt = body.demo === true && session.mode !== "decision"
           ? `${rendered}\n\nStage demonstration: do not inspect files or use tools. In no more than three short sentences, state the problem, constraint, and next action you inherited.`
           : rendered;
         const continuity = priorResponse ? `\n\nPrevious serialized agent output from this Relay session:\n${priorResponse.slice(-6_000)}` : "";
-        const prompt = `${basePrompt}${continuity}${roleInstructions ? `\n\nRole-specific instructions:\n${roleInstructions}` : ""}`;
+        const prompt = session.mode === "decision"
+          ? `${basePrompt}${continuity}`
+          : `${basePrompt}${continuity}${roleInstructions ? `\n\nRole-specific instructions:\n${roleInstructions}` : ""}`;
         const requestedBy = typeof body.requestedBy === "string" ? body.requestedBy : "session-api";
-        await sessions.addActivity(session.id, token, { type: "agent-queued", actor: requestedBy, detail: "queued behind the session's serialized agent runner" });
+        await sessions.addActivity(session.id, token, { type: "agent-queued", actor: requestedBy, detail: session.mode === "decision" ? "waiting for the shared agent" : "queued behind the session's serialized agent runner" });
         const output = await agentQueue.enqueue(session.id, {
           target, requestedBy,
         }, async (queueJob) => {
-          await sessions.addActivity(session.id, token, { type: "agent-running", actor: requestedBy, detail: `working in ${target} through the shared Sailbox · fast model` });
-          await sessions.addActivity(session.id, token, { type: "agent-progress", actor: requestedBy, detail: "Thinking: OpenCode model step requested" });
+          await sessions.addActivity(session.id, token, { type: "agent-running", actor: requestedBy, detail: session.mode === "decision" ? "reviewing the shared conversation · fast model" : `working in ${target} through the shared Sailbox · fast model` });
+          await sessions.addActivity(session.id, token, { type: "agent-progress", actor: requestedBy, detail: session.mode === "decision" ? "Thinking: comparing both people's preferences and constraints" : "Thinking: OpenCode model step requested" });
           try {
           let lastProgressAt = 0, progressBuffer = "", progressCount = 0, modelStepCount = 0, lastProgressDetail = "";
           let progressWrites = Promise.resolve();
@@ -539,11 +582,12 @@ export async function createRelayServer(options = {}) {
             await sessions.addActivity(session.id, token, { type: "agent-escalation", actor: "Relay", detail: `${modelDisplayName(fastModel)} stalled · ${decision.reason}` });
             let evidence = [];
             try {
+              if (session.mode !== "build" || !session.repository.prNumber) throw Object.assign(new Error("Code review evidence does not apply to this shared decision."), { code: "SKIP_GREPTILE" });
               await sessions.syncGreptile(session.id, token);
               evidence = greptileEvidence(await sessions.get(session.id, token));
               await sessions.addActivity(session.id, token, { type: "greptile", actor: "Greptile", detail: evidence.length ? `supplied ${evidence.length} relevant finding${evidence.length === 1 ? "" : "s"}` : "checked repository evidence · no open findings" });
             } catch (error) {
-              await sessions.addActivity(session.id, token, { type: "greptile", actor: "Greptile", detail: `evidence refresh unavailable · ${redactAgentProgress(error.message)}` });
+              if (error.code !== "SKIP_GREPTILE") await sessions.addActivity(session.id, token, { type: "greptile", actor: "Greptile", detail: `evidence refresh unavailable · ${redactAgentProgress(error.message)}` });
             }
             await sessions.addActivity(session.id, token, { type: "agent-escalation", actor: "Relay", detail: `escalated to ${modelDisplayName(strongModel)} · checkpoint preserved · retry 1 of 1` });
             const retryPrompt = escalationPrompt(prompt, { reason: decision.reason, evidence, initialResponse });

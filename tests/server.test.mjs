@@ -310,3 +310,58 @@ test("local session checkpoints do not invent a GitHub repository URL", async ()
     assert.equal(record.capsule.artifacts.some((artifact) => artifact.uri.includes("github.com/Local")), false);
   });
 });
+
+test("shared decisions accept deduplicated chat adapters and use a non-coding agent prompt", async () => {
+  const prompts = [];
+  const fakeRunner = {
+    status: () => ({ configured: true, harness: "test", transport: "process" }),
+    run: async (prompt) => {
+      prompts.push(prompt);
+      return {
+        id: "mattress-agent-run",
+        harness: "test",
+        startedAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+        durationMs: 2,
+        exitCode: 0,
+        stdout: "You both prefer a medium-firm mattress. Compare motion isolation and the return window next.",
+        stderr: "",
+      };
+    },
+  };
+  await withServer(async (origin) => {
+    const created = await (await fetch(`${origin}/v1/sessions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ title: "Choose a mattress", mode: "decision", creatorName: "Alex", collaboratorName: "Sam" }),
+    })).json();
+    const headers = { authorization: `Bearer ${created.token}`, "content-type": "application/json" };
+    const messageBody = JSON.stringify({
+      sender: { name: "Sam", role: "Partner" },
+      text: "I sleep on my side and care about motion isolation.",
+      source: { platform: "imessage", threadId: "chat-42", messageId: "message-7" },
+    });
+    const first = await (await fetch(`${origin}/v1/sessions/${created.id}/messages`, { method: "POST", headers, body: messageBody })).json();
+    const second = await (await fetch(`${origin}/v1/sessions/${created.id}/messages`, { method: "POST", headers, body: messageBody })).json();
+    assert.equal(first.deduplicated, false);
+    assert.equal(second.deduplicated, true);
+
+    const thread = await (await fetch(`${origin}/v1/sessions/${created.id}/messages`, { headers })).json();
+    assert.equal(thread.messages.length, 1);
+    assert.equal(thread.messages[0].source.platform, "imessage");
+
+    await fetch(`${origin}/v1/sessions/${created.id}/checkpoints`, { method: "POST", headers, body: JSON.stringify({ actor: "Sam" }) });
+    const agent = await fetch(`${origin}/v1/sessions/${created.id}/agent/run`, {
+      method: "POST", headers, body: JSON.stringify({ requestedBy: "Relay · shared assistant", target: "generic", instructions: "Help us narrow the options." }),
+    });
+    assert.equal(agent.status, 201);
+    assert.equal(prompts.length, 1);
+    assert.match(prompts[0], /shared assistant helping two people/);
+    assert.match(prompts[0], /Sam: I sleep on my side/);
+    assert.doesNotMatch(prompts[0], /Open the relevant project|resume this task|RunEvals/i);
+
+    const finalThread = await (await fetch(`${origin}/v1/sessions/${created.id}/messages`, { headers })).json();
+    assert.equal(finalThread.messages.length, 2);
+    assert.equal(finalThread.messages[1].kind, "agent");
+  }, { agentRunner: fakeRunner, escalationEnabled: false });
+});

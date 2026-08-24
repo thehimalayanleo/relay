@@ -15,6 +15,7 @@
     "bin/",
     "src/",
     "public/",
+    "docs/",
     "scripts/",
     "schema/",
     "examples/",
@@ -35,7 +36,8 @@
   },
   "exports": {
     ".": "./src/client.mjs",
-    "./protocol": "./src/protocol.mjs"
+    "./protocol": "./src/protocol.mjs",
+    "./chat-bridge": "./src/chat-bridge.mjs"
   },
   "scripts": {
     "start": "node src/server.mjs",

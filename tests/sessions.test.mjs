@@ -24,6 +24,9 @@ test("a local session starts without GitHub", async () => {
     branch: "",
     prNumber: null,
   });
+  assert.equal(created.record.mode, "decision");
+  assert.equal(created.record.people.creator.name, "Host");
+  assert.match(created.record.brief.constraint, /both people's preferences/i);
 });
 
 test("a new GitHub repository can start before its first pull request", async () => {
@@ -63,6 +66,26 @@ test("chat activity retains exact collaborator text", async () => {
   await service.addActivity(created.record.id, created.token, { type: "chat", actor: "Sanjana", detail: "Add a replay guard", value: "Add a replay guard" });
   const session = await service.get(created.record.id, created.token);
   assert.equal(session.activity.at(-1).value, "Add a replay guard");
+});
+
+test("chat bridge deduplicates provider messages and updates the shared decision", async () => {
+  const { service } = await fixture();
+  const created = await service.create({ title: "Choose a mattress", mode: "decision", creatorName: "Ajinkya", collaboratorName: "Maya" });
+  const input = {
+    sender: { name: "Maya", role: "Partner" },
+    text: "Medium firm, under $2,000.",
+    source: { platform: "imessage", threadId: "family", messageId: "message-42" },
+  };
+  const first = await service.addMessage(created.record.id, created.token, input);
+  const repeated = await service.addMessage(created.record.id, created.token, input);
+  assert.equal(first.deduplicated, false);
+  assert.equal(repeated.deduplicated, true);
+  const session = await service.get(created.record.id, created.token);
+  assert.equal(session.activity.filter((event) => event.type === "chat").length, 1);
+  assert.equal(session.brief.implementation, input.text);
+  assert.equal(session.people.collaborator.name, "Maya");
+  const exported = await service.listMessages(created.record.id, created.token);
+  assert.equal(exported.messages[0].source.platform, "imessage");
 });
 
 test("failed agent runs terminate the live state truthfully", async () => {
