@@ -44,3 +44,11 @@ test("browser bundle contains no provider credentials or provider API authorizat
     assert.equal(browser.includes(forbidden), false, forbidden);
   }
 });
+
+test("browser send path seals context before queuing the host agent", async () => {
+  const browser = await readFile(new URL("../public/greptile-demo.js", import.meta.url), "utf8");
+  const checkpoint = browser.indexOf("/checkpoints`");
+  const agentRun = browser.indexOf("/agent/run`");
+  assert.ok(checkpoint > 0);
+  assert.ok(agentRun > checkpoint);
+});

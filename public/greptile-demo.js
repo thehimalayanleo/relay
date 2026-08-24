@@ -32,24 +32,20 @@ function renderSessions() {
 
 function renderFeed() {
   const exactRuns = (snapshot.agentRuns ?? []).filter((run) => run.exitCode === 0 && run.inheritedContext && run.response && run.response !== "OpenCode completed with no text response.");
-  const latestByParticipant = new Map();
-  for (const run of exactRuns) latestByParticipant.set(cleanLabel(run.requestedBy), run);
-  const runs = [...latestByParticipant.values()].sort((a, b) => new Date(a.completedAt) - new Date(b.completedAt));
-  const collaboratorEdit = [...(snapshot.activity ?? [])].reverse().find((event) => ["chat", "edit"].includes(event.type) && event.actor === "Sanjana");
-  const editHtml = collaboratorEdit ? `<article class="event"><div class="avatar">S</div><div class="bubble"><strong>Sanjana · SWE</strong><time>${new Date(collaboratorEdit.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time><span class="inherited">Added to the shared agent stack</span><div class="agent-response">${esc(collaboratorEdit.value || collaboratorEdit.detail || snapshot.brief.implementation)}</div></div></article>` : "";
+  const messages = (snapshot.activity ?? []).filter((event) => event.type === "chat" && (event.value || event.detail));
   const liveAgent = [...(snapshot.activity ?? [])].reverse().find((event) => ["agent-running", "agent-progress"].includes(event.type) && !(snapshot.agentRuns ?? []).some((run) => run.requestedBy === event.actor && new Date(run.completedAt) >= new Date(event.at)));
   const started = liveAgent && [...(snapshot.activity ?? [])].reverse().find((event) => event.type === "agent-running" && event.actor === liveAgent.actor);
   liveAgentStartedAt = started?.at ?? liveAgent?.at ?? null;
   const liveHtml = liveAgent ? `<article class="event live-agent"><div class="avatar">↗</div><div class="bubble"><strong>${esc(cleanLabel(liveAgent.actor))}</strong><span class="inherited"><i class="live-dot"></i> Working now · <span id="live-elapsed">0s</span> · serialized through one Sailbox</span><div class="agent-response">${esc(liveAgent.detail)}</div><div class="live-track"><i></i></div></div></article>` : "";
-  if (runs.length) {
-    byId("feed").innerHTML = liveHtml + editHtml + runs.map((run) => {
+  const timeline = [
+    ...messages.map((event) => ({ at: event.at, html: `<article class="event"><div class="avatar">${esc((event.actor || "R")[0])}</div><div class="bubble"><strong>${esc(event.actor || "Relay")} · SWE</strong><time>${new Date(event.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time><span class="inherited">Added to the shared agent stack</span><div class="agent-response">${esc(event.value || event.detail)}</div></div></article>` })),
+    ...exactRuns.map((run) => {
       const participant = cleanLabel(run.requestedBy);
-      const inherited = `Inherited: ${run.inheritedContext.problem} Constraint: ${run.inheritedContext.constraint} Next: ${run.inheritedContext.nextAction}`;
-      return `<article class="event"><div class="avatar">${esc(participant[0])}</div><div class="bubble"><strong>${esc(participant)}</strong><time>${new Date(run.completedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time><span class="inherited">${esc(inherited)}</span><div class="agent-response">${esc(run.response)}</div></div></article>`;
-    }).join("");
-    return;
-  }
-  if (liveHtml || editHtml) { byId("feed").innerHTML = liveHtml + editHtml; return; }
+      const inherited = `Problem: ${run.inheritedContext.problem}\nConstraint: ${run.inheritedContext.constraint}\nNext: ${run.inheritedContext.nextAction}`;
+      return { at: run.completedAt, html: `<article class="event"><div class="avatar">${esc(participant[0])}</div><div class="bubble"><strong>${esc(participant)}</strong><time>${new Date(run.completedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time><span class="inherited">Completed through the serialized host queue</span><div class="agent-response">${esc(run.response)}</div><details class="run-context"><summary>Inherited context</summary><div class="agent-response">${esc(inherited)}</div></details></div></article>` };
+    }),
+  ].sort((a, b) => new Date(a.at) - new Date(b.at));
+  if (timeline.length || liveHtml) { byId("feed").innerHTML = timeline.map((item) => item.html).join("") + liveHtml; return; }
   const event = snapshot.activity?.at(-1);
   byId("feed").innerHTML = event ? `<article class="event"><div class="avatar">${esc((event.actor || "R")[0])}</div><div class="bubble"><strong>${esc(event.actor || "Relay")}</strong><p>${esc(event.detail)}</p></div></article>` : "";
 }
@@ -62,6 +58,8 @@ function renderGreptile() {
   byId("greptile-note").textContent = !snapshot.repository.prNumber ? "No pull request linked" : samples.length ? `Review ${latest.iteration}` : "Waiting for first review";
   const max = Math.max(1, ...samples.flatMap((sample) => [sample.closed, sample.remaining]));
   byId("greptile-spark").innerHTML = samples.length ? samples.map((sample) => `<span class="spark-sample" title="${sample.closed} addressed, ${sample.remaining} open"><i style="height:${Math.max(2, sample.closed / max * 100)}%"></i><i class="open" style="height:${Math.max(2, sample.remaining / max * 100)}%"></i></span>`).join("") : '<span style="color:#666;font-size:10px;padding-bottom:7px">No Greptile samples yet</span>';
+  const findings = Object.values(snapshot.greptile?.findings ?? {});
+  byId("greptile-findings").innerHTML = findings.length ? findings.map((finding) => `<details class="finding"><summary><code>${esc(finding.id)}</code> · ${esc(finding.path || "repository")}${finding.state === "closed" ? " · addressed" : finding.state === "unknown" ? " · status unknown" : ""}</summary><p>${esc(finding.summary || "No finding text returned.")}</p></details>`).join("") : "";
 }
 
 function render(next) {
@@ -79,6 +77,7 @@ function render(next) {
   byId("host-help").textContent = active.role === "agent" ? "Runs without either browser open" : ["pm", "collaborator"].includes(active.role) ? "No local keys required" : "Powered by host integrations";
   const latestGreptile = snapshot.greptile?.samples?.at(-1) ?? { closed: 0, remaining: 0 };
   byId("greptile-pill").textContent = snapshot.repository.prNumber ? `Greptile · ${latestGreptile.closed} addressed · ${latestGreptile.remaining} open` : "Greptile · waiting for PR";
+  document.querySelector(".conversation").classList.toggle("has-content", Boolean((snapshot.activity ?? []).length || (snapshot.agentRuns ?? []).length));
   renderFeed(); renderGreptile(); remember();
   clearTimeout(memoryTimer); memoryTimer = setTimeout(recallMemory, 900);
 }
@@ -95,7 +94,7 @@ async function connect(session) {
   status(["pm", "collaborator"].includes(active.role) ? "You are in Ajinkya’s live workspace. No setup required." : `Session ready · invite expires ${new Date(snapshot.expiresAt).toLocaleString()}`);
   if (snapshot.repository.prNumber && !syncedSessions.has(active.id)) {
     syncedSessions.add(active.id);
-    fetch(`/v1/sessions/${active.id}/greptile/sync`, { method: "POST", headers: authHeaders() }).then(json).then((metrics) => status(`Greptile · ${metrics.totals.closed} addressed · ${metrics.totals.remaining} open`)).catch(() => { byId("greptile-pill").textContent = "Greptile · PR not indexed"; });
+    fetch(`/v1/sessions/${active.id}/greptile/sync`, { method: "POST", headers: authHeaders() }).then(json).then((metrics) => status(`Greptile review ${metrics.iteration} synced.`)).catch(() => { byId("greptile-pill").textContent = "Greptile · PR not indexed"; });
   }
 }
 
@@ -111,7 +110,12 @@ byId("send").onclick = async () => {
     await updateField("implementation", value);
     await json(await fetch(`/v1/sessions/${active.id}/activity`, { method: "POST", headers: authHeaders({ "content-type": "application/json" }), body: JSON.stringify({ type: "chat", actor: person().name, detail: value, value }) }));
     byId("composer").value = "";
-    status("Added to the shared agent stack.");
+    status("Saved. Sealing context for the host agent…");
+    await json(await fetch(`/v1/sessions/${active.id}/checkpoints`, { method: "POST", headers: authHeaders({ "content-type": "application/json" }), body: JSON.stringify({ actor: person().name }) }));
+    status("Agent continuation queued on the host.");
+    const requestedBy = `${person().name} agent · ${person().role}`;
+    fetch(`/v1/sessions/${active.id}/agent/run`, { method: "POST", headers: authHeaders({ "content-type": "application/json" }), body: JSON.stringify({ target: "opencode", requestedBy, instructions: value }) })
+      .then(json).then(() => status("Host agent completed. Full response preserved above.")).catch((error) => status(`Agent failed: ${error.message}`));
   } catch (error) { status(error.message); }
   finally { byId("send").disabled = false; }
 };
