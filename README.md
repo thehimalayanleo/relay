@@ -2,9 +2,9 @@
 
 **Move the work loop, not just the transcript.**
 
-[![Relay transfers an active investigation from User 1 to User 2](./docs/assets/relay-sev-handoff.gif)](https://www.loom.com/share/908095a693e44b4db042c9ea254a9d9a)
+![Relay shared ARC-AGI-3 workspace with Ajinkya, Sanjana, OpenCode, Sail, Greptile, and Claude-Mem](./docs/assets/relay-demo.gif)
 
-*A compressed, silent preview of the full [Relay investigation demo](https://www.loom.com/share/908095a693e44b4db042c9ea254a9d9a).*
+*A real Relay session: two engineers share one durable thread while host-side OpenCode execution remains serialized and auditable.*
 
 Many production bugs are not isolated coding tasks. They depend on tribal knowledge spread across teams, tools, and prior decisions, and the hardest cases can take one to three days to resolve. Coding agents make an individual developer faster, but today each agent usually works inside one person's environment with its own context, filesystem, and understanding of the task. That makes genuine parallel human-agent collaboration difficult.
 
@@ -20,7 +20,7 @@ The current release is a local or trusted-network prototype. It has no user acco
 
 - Persistent capability-scoped sessions with PM/SWE presence, synchronized briefs, and a common agent activity stream.
 - Browser-local recent-session switching, one-click PM invitations, and 72-hour capability expiry.
-- Goal-first workspace discovery from the host's Greptile-indexed pull requests, plus an explicit host-only action to create a new private GitHub repository.
+- Goal-first workspace discovery from the host's Greptile-indexed pull requests, plus immediate local sessions that can connect GitHub later.
 - Session-specific Greptile timelines that distinguish closed, remaining, and unknown findings without crediting disappearance as resolution.
 - Claude-Mem adapter for retrieving cited session observations before Relay seals the transferable subset.
 - Serialized model-run queue shared by HTTP, CLI, JavaScript, OpenCode, and Google A2A entry points.
@@ -43,7 +43,7 @@ This is not a full environment checkpoint. It transfers CAMP and handoff context
 
 Open `http://127.0.0.1:4317/demo/greptile` after starting Relay Core.
 
-- Ajinkya describes the work. Relay ranks the host's Greptile-indexed pull requests, or explicitly creates a new private GitHub repository when the work is greenfield.
+- Ajinkya describes the work. Relay ranks the host's Greptile-indexed pull requests or starts locally when the work is greenfield.
 - Sanjana follows that link. Changes to the product brief appear in both browsers without refreshing.
 - Each browser remembers only the sessions whose capability links it has opened. The server exposes no global session list.
 - Both collaborators observe the same agent activity stream and exact retained agent responses, while agent runs remain serialized and auditable.
