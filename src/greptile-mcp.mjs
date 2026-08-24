@@ -49,8 +49,8 @@ export class GreptileMcpClient {
     });
   }
 
-  async callTool(name, args = {}) {
-    const result = await this.request("tools/call", { name, arguments: args });
+  async callTool(name, args = {}, options = {}) {
+    const result = await this.request("tools/call", { name, arguments: args }, options);
     if (result?.isError) {
       const message = result.content?.find((item) => item.type === "text")?.text;
       const error = new Error(message ?? `Greptile tool ${name} failed.`);
@@ -67,7 +67,7 @@ export class GreptileMcpClient {
   }
 
   listOpenPullRequests(limit = 10) {
-    return this.callTool("list_pull_requests", { state: "open", limit });
+    return this.callTool("list_pull_requests", { state: "open", limit }, { timeoutMs: 8_000 });
   }
 
   listGreptileComments(repository, addressed = false) {

@@ -19,6 +19,8 @@ test("Greptile MCP client authenticates and parses tool content", async () => {
   assert.deepEqual(result, { comments: [1] });
   assert.equal(requests[0].headers.authorization, "Bearer test-key");
   assert.equal(JSON.parse(requests[0].body).method, "tools/call");
+  await client.listOpenPullRequests(5);
+  assert.ok(requests[1].signal instanceof AbortSignal);
 });
 
 test("Greptile MCP client fails closed without a key", async () => {

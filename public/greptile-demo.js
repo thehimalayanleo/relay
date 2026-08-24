@@ -216,19 +216,21 @@ async function discoverWorkspaces() {
   if (!discoveredWorkspaces) byId("workspace-results").innerHTML = '<span style="color:#777;font-size:12px">Searching the host’s active work…</span>';
   try {
     if (!discoveredWorkspaces) {
-      const data = await json(await fetch("/v1/integrations/greptile/pull-requests?limit=50"));
+      const data = await json(await fetch("/v1/integrations/greptile/pull-requests?limit=50", { signal: AbortSignal.timeout(8_500) }));
       discoveredWorkspaces = data.result?.mergeRequests ?? [];
     }
     const words = byId("session-title").value.toLowerCase().split(/\W+/).filter((word) => word.length > 2);
     const options = discoveredWorkspaces.map((pr) => ({ name: pr.repository.name, prNumber: pr.number, title: pr.title, branch: pr.branches?.source, score: words.filter((word) => `${pr.title} ${pr.repository.name}`.toLowerCase().includes(word)).length })).sort((a, b) => b.score - a.score).slice(0, 8);
     byId("workspace-results").innerHTML = options.length ? options.map((item, index) => `<label class="workspace-option"><input type="radio" name="workspace" value="${index}"><b>${esc(item.title)}</b><small>${esc(item.name)} · PR #${item.prNumber}</small></label>`).join("") : '<span style="color:#777;font-size:12px">No active pull requests found. Start locally below.</span>';
     for (const input of document.querySelectorAll('input[name="workspace"]')) input.onchange = () => { selectedWorkspace = options[Number(input.value)]; byId("create-session").disabled = false; };
-  } catch (error) { byId("workspace-results").innerHTML = `<span style="color:#888;font-size:12px">${esc(error.message)}. You can start locally instead.</span>`; }
+  } catch { byId("workspace-results").innerHTML = '<span style="color:#888;font-size:12px">GitHub workspace search is unavailable. Start locally now and connect a repository later.</span>'; }
 }
 async function createSession(repository) {
   const target = repository ?? { name: "Local workspace", remote: "local", defaultBranch: "", prNumber: null };
   const created = await json(await fetch("/v1/sessions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ title: byId("session-title").value, creatorRole: "swe", repository: target }) }));
-  history.replaceState(null, "", new URL(created.creatorUrl).hash); dialog.close(); await connect(fromHash());
+  history.replaceState(null, "", new URL(created.creatorUrl).hash); dialog.close();
+  try { await connect(fromHash()); }
+  catch { location.assign(created.creatorUrl); }
 }
 byId("new-session").onclick = () => { selectedWorkspace = null; byId("create-session").disabled = true; dialog.showModal(); discoverWorkspaces(); }; byId("close-sheet").onclick = () => dialog.close();
 let discoveryTimer; byId("session-title").oninput = () => { clearTimeout(discoveryTimer); discoveryTimer = setTimeout(discoverWorkspaces, 350); };
