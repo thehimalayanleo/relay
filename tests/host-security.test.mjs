@@ -71,6 +71,9 @@ test("browser renders the host integration trace", async () => {
   assert.match(page, /id="preview-session" target="_blank"/);
   assert.match(browser, /renderRepository/);
   assert.doesNotMatch(browser, /window\.open\(/);
-  assert.match(browser, /GitHub workspace search is unavailable/);
+  assert.match(page, /Start shared session/);
+  assert.match(browser, /Connect later/);
+  assert.doesNotMatch(page, /Use selected workspace/);
+  assert.doesNotMatch(browser, /GitHub workspace search is unavailable/);
   assert.match(browser, /location\.assign\(created\.creatorUrl\)/);
 });

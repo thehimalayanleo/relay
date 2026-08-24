@@ -212,18 +212,48 @@ async function recallMemory() {
 byId("invite-session").onclick = async () => { if (!snapshot) return; await navigator.clipboard.writeText(snapshot.links?.collaboratorInviteUrl ?? snapshot.links?.pmInviteUrl ?? active.inviteUrl); status("Invite copied. Sanjana only needs the link."); };
 
 const dialog = byId("session-dialog");
+function setSessionAction() {
+  const titleReady = Boolean(byId("session-title").value.trim());
+  byId("create-session").disabled = !titleReady;
+  byId("create-session").textContent = selectedWorkspace
+    ? `Start with PR #${selectedWorkspace.prNumber}`
+    : "Start shared session";
+}
+function renderWorkspaceOptions() {
+  if (!discoveredWorkspaces?.length) {
+    byId("workspace-results").innerHTML = "";
+    return;
+  }
+  const words = byId("session-title").value.toLowerCase().split(/\W+/).filter((word) => word.length > 2);
+  const options = discoveredWorkspaces
+    .map((pr) => ({ name: pr.repository.name, prNumber: pr.number, title: pr.title, branch: pr.branches?.source, score: words.filter((word) => `${pr.title} ${pr.repository.name}`.toLowerCase().includes(word)).length }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5);
+  byId("workspace-results").innerHTML = options.map((item, index) => {
+    const selected = selectedWorkspace?.name === item.name && selectedWorkspace?.prNumber === item.prNumber;
+    return `<button type="button" class="workspace-option${selected ? " selected" : ""}" data-workspace="${index}"><b>${esc(item.title)}</b><small>${esc(item.name)} · PR #${item.prNumber}</small>${selected ? "<em>Selected</em>" : ""}</button>`;
+  }).join("");
+  for (const button of document.querySelectorAll("[data-workspace]")) button.onclick = () => {
+    const item = options[Number(button.dataset.workspace)];
+    selectedWorkspace = selectedWorkspace?.name === item.name && selectedWorkspace?.prNumber === item.prNumber ? null : item;
+    renderWorkspaceOptions();
+    setSessionAction();
+  };
+}
 async function discoverWorkspaces() {
-  if (!discoveredWorkspaces) byId("workspace-results").innerHTML = '<span style="color:#777;font-size:12px">Searching the host’s active work…</span>';
+  byId("repo-search-state").textContent = "Searching…";
   try {
     if (!discoveredWorkspaces) {
       const data = await json(await fetch("/v1/integrations/greptile/pull-requests?limit=50", { signal: AbortSignal.timeout(8_500) }));
       discoveredWorkspaces = data.result?.mergeRequests ?? [];
     }
-    const words = byId("session-title").value.toLowerCase().split(/\W+/).filter((word) => word.length > 2);
-    const options = discoveredWorkspaces.map((pr) => ({ name: pr.repository.name, prNumber: pr.number, title: pr.title, branch: pr.branches?.source, score: words.filter((word) => `${pr.title} ${pr.repository.name}`.toLowerCase().includes(word)).length })).sort((a, b) => b.score - a.score).slice(0, 8);
-    byId("workspace-results").innerHTML = options.length ? options.map((item, index) => `<label class="workspace-option"><input type="radio" name="workspace" value="${index}"><b>${esc(item.title)}</b><small>${esc(item.name)} · PR #${item.prNumber}</small></label>`).join("") : '<span style="color:#777;font-size:12px">No active pull requests found. Start locally below.</span>';
-    for (const input of document.querySelectorAll('input[name="workspace"]')) input.onchange = () => { selectedWorkspace = options[Number(input.value)]; byId("create-session").disabled = false; };
-  } catch { byId("workspace-results").innerHTML = '<span style="color:#888;font-size:12px">GitHub workspace search is unavailable. Start locally now and connect a repository later.</span>'; }
+    byId("repo-search-state").textContent = discoveredWorkspaces.length ? `${discoveredWorkspaces.length} found` : "None linked";
+    renderWorkspaceOptions();
+  } catch {
+    discoveredWorkspaces = [];
+    byId("workspace-results").innerHTML = "";
+    byId("repo-search-state").textContent = "Connect later";
+  }
 }
 async function createSession(repository) {
   const target = repository ?? { name: "Local workspace", remote: "local", defaultBranch: "", prNumber: null };
@@ -232,10 +262,32 @@ async function createSession(repository) {
   try { await connect(fromHash()); }
   catch { location.assign(created.creatorUrl); }
 }
-byId("new-session").onclick = () => { selectedWorkspace = null; byId("create-session").disabled = true; dialog.showModal(); discoverWorkspaces(); }; byId("close-sheet").onclick = () => dialog.close();
-let discoveryTimer; byId("session-title").oninput = () => { clearTimeout(discoveryTimer); discoveryTimer = setTimeout(discoverWorkspaces, 350); };
-byId("create-local").onclick = async () => { const title = byId("session-title").value.trim(); if (!title) return byId("session-title").focus(); byId("create-local").disabled = true; try { await createSession(); } catch (e) { byId("session-error").textContent = e.message; } finally { byId("create-local").disabled = false; } };
-byId("session-form").onsubmit = async (event) => { event.preventDefault(); if (!selectedWorkspace) return; byId("create-session").disabled = true; try { await createSession(selectedWorkspace); } catch (e) { byId("session-error").textContent = e.message; } finally { byId("create-session").disabled = false; } };
+byId("new-session").onclick = () => {
+  selectedWorkspace = null;
+  byId("session-title").value = "";
+  byId("session-error").textContent = "";
+  byId("workspace-results").innerHTML = "";
+  byId("repo-search-state").textContent = "Optional";
+  setSessionAction();
+  dialog.showModal();
+  byId("session-title").focus();
+  discoverWorkspaces();
+};
+byId("close-sheet").onclick = () => dialog.close();
+byId("session-title").oninput = () => { renderWorkspaceOptions(); setSessionAction(); };
+byId("session-title").onkeydown = (event) => {
+  if (event.key !== "Enter" || event.isComposing) return;
+  event.preventDefault();
+  byId("session-form").requestSubmit();
+};
+byId("session-form").onsubmit = async (event) => {
+  event.preventDefault();
+  if (!byId("session-title").value.trim()) return byId("session-title").focus();
+  byId("create-session").disabled = true;
+  byId("create-session").textContent = "Starting…";
+  try { await createSession(selectedWorkspace); }
+  catch (e) { byId("session-error").textContent = e.message; setSessionAction(); }
+};
 window.addEventListener("hashchange", () => { const next = fromHash(); if (next && next.id !== active?.id) connect(next).catch((e) => status(e.message)); });
 
 try { const [health, memory] = await Promise.all([json(await fetch("/health")), json(await fetch("/v1/integrations/claude-mem/status")).catch(() => ({ connected: false }))]); claudeMemReady = memory.connected; byId("sail-pill").textContent = health.workPod.provider === "sail" ? "Sail · ready" : "Local · ready"; byId("memory-pill").textContent = memory.connected ? "Claude-Mem · listening" : "Claude-Mem · optional"; } catch { status("Relay is offline."); }
