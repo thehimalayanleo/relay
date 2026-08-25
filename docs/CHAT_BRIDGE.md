@@ -45,6 +45,19 @@ Two implementation paths are viable:
 
 Both paths should keep the session capability in macOS Keychain, never in message text. Provider-specific code stays outside the Relay core, so the same session can also be reached from a browser, CLI, Slack, or another chat surface.
 
+## Closing the loop
+
+A chat thread becomes useful organizational memory only when it captures the outcome, not just the discussion. Decision-mode sessions expose two capability-scoped actions:
+
+```text
+POST /v1/sessions/:id/decision/propose
+POST /v1/sessions/:id/decision/approve
+```
+
+The proposer supplies the outcome, rationale, next step, name, and a stable participant id. A second participant approval marks the outcome as agreed. Revising the proposal clears earlier approvals except the revising participant's own approval. The agreed outcome is included in later Relay checkpoints.
+
+This is coordination state, not verified identity. Until account authentication is added, the session capability controls access and participant ids prevent accidental duplicate approvals inside the client.
+
 ## CLI adapter smoke test
 
 ```bash

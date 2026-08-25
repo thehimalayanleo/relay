@@ -74,6 +74,23 @@ function normalizePeople(input = {}, mode = "decision") {
   };
 }
 
+function emptyDecision() {
+  return {
+    status: "open",
+    proposal: "",
+    rationale: "",
+    nextStep: "",
+    proposedBy: "",
+    proposedAt: null,
+    approvals: [],
+    decidedAt: null,
+  };
+}
+
+function normalizedDecision(record) {
+  return { ...emptyDecision(), ...(record.decision ?? {}) };
+}
+
 function commentId(comment) {
   return text(comment?.id ?? comment?.commentId ?? comment?.nodeId, 240);
 }
@@ -182,6 +199,7 @@ export class SessionService {
         implementation: "Review the shared brief, then queue the next safe action.",
       },
       activity: [],
+      decision: emptyDecision(),
       claudeMem: { observationIds: [], lastRecallAt: null },
       checkpoints: [],
       agentRuns: [],
@@ -207,7 +225,7 @@ export class SessionService {
     const cutoff = this.now().getTime() - 30_000;
     const participants = [...(this.participants.get(record.id)?.values() ?? [])]
       .filter((person) => new Date(person.lastSeenAt).getTime() >= cutoff);
-    return { ...safe, mode, people, participants, activity: safe.activity.slice(-50) };
+    return { ...safe, mode, people, decision: normalizedDecision(safe), participants, activity: safe.activity.slice(-50) };
   }
 
   async get(id, token) {
@@ -305,6 +323,72 @@ export class SessionService {
   async listMessages(id, token) {
     const record = this.assertReadable(await this.store.get(id), token);
     return { sessionId: id, messages: messagesFromSession(record) };
+  }
+
+  async proposeDecision(id, token, input = {}) {
+    this.assertReadable(await this.store.get(id), token);
+    const proposal = text(input.proposal, 2_000);
+    if (!proposal) throw new TypeError("Decision proposal is required.");
+    const actor = text(input.actor, 80) || "Collaborator";
+    const actorId = text(input.actorId, 100);
+    if (!actorId) throw new TypeError("A stable participant id is required to propose a decision.");
+    const now = this.now().toISOString();
+    const updated = await this.store.update(id, (record) => {
+      this.assertReadable(record, token);
+      record.decision = {
+        status: "proposed",
+        proposal,
+        rationale: text(input.rationale, 4_000),
+        nextStep: text(input.nextStep, 2_000),
+        proposedBy: actor,
+        proposedAt: now,
+        approvals: [{ actorId, actor, at: now }],
+        decidedAt: null,
+      };
+      record.version += 1;
+      record.updatedAt = now;
+      record.activity.push({
+        id: randomUUID(), type: "decision-proposed", actor,
+        detail: `proposed: ${proposal.slice(0, 420)}`, value: proposal,
+        at: now, version: record.version,
+      });
+      return record;
+    });
+    const snapshot = this.snapshot(updated);
+    this.broadcast(id, "workspace", snapshot);
+    return snapshot;
+  }
+
+  async approveDecision(id, token, input = {}) {
+    this.assertReadable(await this.store.get(id), token);
+    const actor = text(input.actor, 80) || "Collaborator";
+    const actorId = text(input.actorId, 100);
+    if (!actorId) throw new TypeError("A stable participant id is required to approve a decision.");
+    const approved = input.approved !== false;
+    const now = this.now().toISOString();
+    const updated = await this.store.update(id, (record) => {
+      this.assertReadable(record, token);
+      const decision = normalizedDecision(record);
+      if (!decision.proposal) throw sessionError("NO_DECISION", "Propose a decision before approving it.");
+      decision.approvals = decision.approvals.filter((item) => item.actorId !== actorId);
+      if (approved) decision.approvals.push({ actorId, actor, at: now });
+      decision.status = decision.approvals.length >= 2 ? "decided" : "proposed";
+      decision.decidedAt = decision.status === "decided" ? now : null;
+      record.decision = decision;
+      record.version += 1;
+      record.updatedAt = now;
+      record.activity.push({
+        id: randomUUID(), type: decision.status === "decided" ? "decision-settled" : "decision-approved",
+        actor,
+        detail: decision.status === "decided" ? `agreed: ${decision.proposal.slice(0, 420)}` : approved ? "approved the proposed decision" : "withdrew approval",
+        value: decision.proposal,
+        at: now, version: record.version,
+      });
+      return record;
+    });
+    const snapshot = this.snapshot(updated);
+    this.broadcast(id, "workspace", snapshot);
+    return snapshot;
   }
 
   async remember(id, token, observationIds = []) {

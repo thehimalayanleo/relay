@@ -18,6 +18,8 @@ Usage:
   relay session create --title TEXT [--mode decision|build] [--repo OWNER/REPO --pr NUMBER] [--creator NAME] [--collaborator NAME] [--server URL]
   relay session message <session-link> --text TEXT [--actor NAME] [--role ROLE] [--platform NAME] [--message-id ID]
   relay session messages <session-link>
+  relay session decide <session-link> --outcome TEXT --actor NAME --actor-id ID [--rationale TEXT] [--next TEXT]
+  relay session agree <session-link> --actor NAME --actor-id ID
   relay arc run --repo-path PATH [--builder-burst 10] [--cycles 1] [--server URL]
   relay doctor [--server URL]
   relay handoff [notes.txt|-] --goal TEXT --next TEXT [--to TARGET] [--from HARNESS] [--pod] [--quiet]
@@ -331,6 +333,33 @@ async function main() {
   if (command === "session" && process.argv[3] === "messages") {
     const endpoint = sessionEndpointFromShareUrl(process.argv[4], "/messages");
     writeJson(await jsonRequest(endpoint.url, authorized(endpoint)));
+    return;
+  }
+
+  if (command === "session" && process.argv[3] === "decide") {
+    const endpoint = sessionEndpointFromShareUrl(process.argv[4], "/decision/propose");
+    const proposal = option("--outcome");
+    const actor = option("--actor");
+    const actorId = option("--actor-id");
+    if (!proposal || !actor || !actorId) throw new Error("session decide requires --outcome, --actor, and --actor-id.");
+    writeJson(await jsonRequest(endpoint.url, {
+      method: "POST",
+      headers: { authorization: `Bearer ${endpoint.token}`, "content-type": "application/json" },
+      body: JSON.stringify({ proposal, rationale: option("--rationale"), nextStep: option("--next"), actor, actorId }),
+    }));
+    return;
+  }
+
+  if (command === "session" && process.argv[3] === "agree") {
+    const endpoint = sessionEndpointFromShareUrl(process.argv[4], "/decision/approve");
+    const actor = option("--actor");
+    const actorId = option("--actor-id");
+    if (!actor || !actorId) throw new Error("session agree requires --actor and --actor-id.");
+    writeJson(await jsonRequest(endpoint.url, {
+      method: "POST",
+      headers: { authorization: `Bearer ${endpoint.token}`, "content-type": "application/json" },
+      body: JSON.stringify({ actor, actorId, approved: true }),
+    }));
     return;
   }
 

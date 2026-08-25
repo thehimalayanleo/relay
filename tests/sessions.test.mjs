@@ -88,6 +88,40 @@ test("chat bridge deduplicates provider messages and updates the shared decision
   assert.equal(exported.messages[0].source.platform, "imessage");
 });
 
+test("two people can turn a shared conversation into a durable agreed outcome", async () => {
+  const { store, service } = await fixture();
+  const created = await service.create({ title: "Choose a mattress", mode: "decision", creatorName: "Ajinkya", collaboratorName: "Maya" });
+  let session = await service.proposeDecision(created.record.id, created.token, {
+    actor: "Ajinkya",
+    actorId: "host-session",
+    proposal: "Buy the medium-firm model after trying it in store.",
+    rationale: "It fits both sleep positions and the budget.",
+    nextStep: "Book a showroom visit.",
+  });
+  assert.equal(session.decision.status, "proposed");
+  assert.equal(session.decision.approvals.length, 1);
+
+  session = await service.approveDecision(created.record.id, created.token, {
+    actor: "Maya",
+    actorId: "collaborator-session",
+  });
+  assert.equal(session.decision.status, "decided");
+  assert.equal(session.decision.approvals.length, 2);
+  assert.ok(session.decision.decidedAt);
+  assert.equal(session.activity.at(-1).type, "decision-settled");
+
+  const restarted = new SessionService({ store });
+  assert.equal((await restarted.get(created.record.id, created.token)).decision.proposal, session.decision.proposal);
+
+  session = await service.proposeDecision(created.record.id, created.token, {
+    actor: "Maya",
+    actorId: "collaborator-session",
+    proposal: "Try both finalists before buying.",
+  });
+  assert.equal(session.decision.status, "proposed");
+  assert.deepEqual(session.decision.approvals.map((item) => item.actorId), ["collaborator-session"]);
+});
+
 test("failed agent runs terminate the live state truthfully", async () => {
   const { service } = await fixture();
   const created = await service.create({ title: "Failure", repository });

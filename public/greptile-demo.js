@@ -93,6 +93,30 @@ function renderRepository() {
   element.dataset.state = stage.state;
   element.querySelector("span").textContent = stage.label;
 }
+
+function renderDecision() {
+  const card = byId("decision-card");
+  const decisionMode = snapshot?.mode === "decision";
+  card.hidden = !decisionMode;
+  if (!decisionMode) return;
+  const decision = snapshot.decision ?? { status: "open", proposal: "", rationale: "", nextStep: "", approvals: [] };
+  const approvals = decision.approvals ?? [];
+  const current = person();
+  const approved = approvals.some((item) => item.actorId === current.id);
+  const settled = decision.status === "decided";
+  card.classList.toggle("decided", settled);
+  byId("decision-label").textContent = settled ? "Agreed outcome" : decision.proposal ? "Proposed outcome" : "Shared outcome";
+  byId("decision-outcome").textContent = decision.proposal || "No decision proposed yet";
+  byId("decision-detail").textContent = decision.proposal
+    ? [decision.rationale, decision.nextStep ? `Next: ${decision.nextStep}` : ""].filter(Boolean).join("\n") || "Waiting for both people to agree."
+    : "Discuss the tradeoffs, then propose an outcome for both people to approve.";
+  byId("decision-count").textContent = settled ? "2 of 2 agreed" : `${Math.min(2, approvals.length)} of 2 agreed`;
+  byId("propose-decision").textContent = decision.proposal ? "Revise" : "Propose";
+  const approve = byId("approve-decision");
+  approve.hidden = !decision.proposal || settled;
+  approve.disabled = approved;
+  approve.textContent = approved ? "Agreed" : "Agree";
+}
 function liveAgentEvent() {
   const activity = snapshot.activity ?? [];
   const runs = snapshot.agentRuns ?? [];
@@ -192,7 +216,7 @@ function render(next) {
       ? "Greptile · review passed"
       : `Greptile · ${latestGreptile.closed} addressed · ${latestGreptile.remaining} open`;
   document.querySelector(".conversation").classList.toggle("has-content", Boolean((snapshot.activity ?? []).length || (snapshot.agentRuns ?? []).length));
-  renderRepository(); renderFeed(); renderTrace(); renderGreptile(); remember();
+  renderRepository(); renderDecision(); renderFeed(); renderTrace(); renderGreptile(); remember();
   clearTimeout(memoryTimer); memoryTimer = setTimeout(recallMemory, 900);
 }
 
@@ -278,6 +302,50 @@ byId("profile-button").onclick = () => {
   byId("profile-name").value = person().name;
   profileDialog.showModal();
   byId("profile-name").select();
+};
+
+const decisionDialog = byId("decision-dialog");
+byId("propose-decision").onclick = () => {
+  const decision = snapshot?.decision ?? {};
+  byId("decision-proposal").value = decision.proposal ?? "";
+  byId("decision-rationale").value = decision.rationale ?? "";
+  byId("decision-next-step").value = decision.nextStep ?? "";
+  decisionDialog.showModal();
+  byId("decision-proposal").focus();
+};
+byId("close-decision").onclick = () => decisionDialog.close();
+byId("decision-form").onsubmit = async (event) => {
+  event.preventDefault();
+  const proposal = byId("decision-proposal").value.trim();
+  if (!proposal) return byId("decision-proposal").focus();
+  const author = person();
+  try {
+    render(await json(await fetch(`/v1/sessions/${active.id}/decision/propose`, {
+      method: "POST",
+      headers: authHeaders({ "content-type": "application/json" }),
+      body: JSON.stringify({
+        actor: author.name,
+        actorId: author.id,
+        proposal,
+        rationale: byId("decision-rationale").value,
+        nextStep: byId("decision-next-step").value,
+      }),
+    })));
+    decisionDialog.close();
+    status("Outcome proposed. Waiting for the other person to agree.");
+  } catch (error) { status(error.message); }
+};
+byId("approve-decision").onclick = async () => {
+  const author = person();
+  try {
+    render(await json(await fetch(`/v1/sessions/${active.id}/decision/approve`, {
+      method: "POST",
+      headers: authHeaders({ "content-type": "application/json" }),
+      body: JSON.stringify({ actor: author.name, actorId: author.id, approved: true }),
+    })));
+    const settled = snapshot.decision?.status === "decided";
+    status(settled ? "Decision agreed by both people. It will be included in the next checkpoint." : "Agreement saved. Waiting for the other person.");
+  } catch (error) { status(error.message); }
 };
 byId("close-profile").onclick = () => profileDialog.close();
 byId("profile-form").onsubmit = async (event) => {

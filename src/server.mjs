@@ -172,7 +172,7 @@ function checkpointCapsule(session) {
         : [`Greptile findings remaining: ${metrics.remaining}`, `Shared brief version: ${session.version}`],
       blocked: !decisionMode && metrics.unknown ? [`${metrics.unknown} Greptile finding(s) have unknown status.`] : [],
     },
-    decisions: [],
+    decisions: session.decision?.status === "decided" ? [session.decision.proposal] : [],
     constraints: [session.brief.constraint].filter(Boolean),
     artifacts: [
       ...(session.repository.remote === "github" && session.repository.name.includes("/")
@@ -199,6 +199,10 @@ function decisionAgentPrompt(session, roleInstructions) {
     .slice(-24)
     .map((event) => `${event.actor || "Participant"}: ${event.value || event.detail}`)
     .join("\n");
+  const decision = session.decision ?? {};
+  const outcomeState = decision.proposal
+    ? `${decision.status === "decided" ? "Agreed" : "Proposed"} outcome: ${decision.proposal}\nApprovals: ${(decision.approvals ?? []).length} of 2${decision.rationale ? `\nRationale: ${decision.rationale}` : ""}${decision.nextStep ? `\nNext step: ${decision.nextStep}` : ""}`
+    : "No outcome has been proposed yet.";
   return `You are Relay, a shared assistant helping two people make a practical decision together.
 
 Shared goal: ${session.brief.problem || session.title}
@@ -207,6 +211,9 @@ Agreement target: ${session.brief.acceptance}
 
 Conversation so far:
 ${conversation || "No messages have been added yet."}
+
+Human-owned decision state:
+${outcomeState}
 
 Respond conversationally to the latest request. Make each person's known preferences explicit, compare concrete tradeoffs, and give one useful next step. Ask at most one high-value question if essential information is missing. Do not mention checkpoints, repositories, code, or internal agent machinery. Do not claim both people agree unless both have said so.
 Use short paragraphs and bullets. Do not use a Markdown table.
@@ -425,6 +432,20 @@ export async function createRelayServer(options = {}) {
         sessionRateLimiter.check(sessionMemoryMatch[1], 2);
         const body = await readJson(request);
         sendJson(response, 200, await sessions.remember(sessionMemoryMatch[1], requestToken(request, url), body.observationIds));
+        return;
+      }
+
+      const sessionDecisionProposalMatch = url.pathname.match(/^\/v1\/sessions\/([0-9a-f-]{36})\/decision\/propose$/i);
+      if (request.method === "POST" && sessionDecisionProposalMatch) {
+        sessionRateLimiter.check(sessionDecisionProposalMatch[1], 2);
+        sendJson(response, 200, await sessions.proposeDecision(sessionDecisionProposalMatch[1], requestToken(request, url), await readJson(request)));
+        return;
+      }
+
+      const sessionDecisionApprovalMatch = url.pathname.match(/^\/v1\/sessions\/([0-9a-f-]{36})\/decision\/approve$/i);
+      if (request.method === "POST" && sessionDecisionApprovalMatch) {
+        sessionRateLimiter.check(sessionDecisionApprovalMatch[1], 2);
+        sendJson(response, 200, await sessions.approveDecision(sessionDecisionApprovalMatch[1], requestToken(request, url), await readJson(request)));
         return;
       }
 
