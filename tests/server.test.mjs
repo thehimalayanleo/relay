@@ -365,3 +365,39 @@ test("shared decisions accept deduplicated chat adapters and use a non-coding ag
     assert.equal(finalThread.messages[1].kind, "agent");
   }, { agentRunner: fakeRunner, escalationEnabled: false });
 });
+
+test("decision proposals require the session capability and settle after two approvals", async () => {
+  await withServer(async (origin) => {
+    const created = await (await fetch(`${origin}/v1/sessions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ title: "Choose a mattress", mode: "decision", creatorName: "Ajinkya", collaboratorName: "Maya" }),
+    })).json();
+    const proposalUrl = `${origin}/v1/sessions/${created.id}/decision/propose`;
+    const denied = await fetch(proposalUrl, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ proposal: "Buy it", actor: "Ajinkya", actorId: "host" }),
+    });
+    assert.equal(denied.status, 403);
+    const headers = { authorization: `Bearer ${created.token}`, "content-type": "application/json" };
+    const proposed = await (await fetch(proposalUrl, {
+      method: "POST", headers,
+      body: JSON.stringify({ proposal: "Try both finalists in store", actor: "Ajinkya", actorId: "host" }),
+    })).json();
+    assert.equal(proposed.decision.status, "proposed");
+    const settled = await (await fetch(`${origin}/v1/sessions/${created.id}/decision/approve`, {
+      method: "POST", headers,
+      body: JSON.stringify({ actor: "Maya", actorId: "collaborator" }),
+    })).json();
+    assert.equal(settled.decision.status, "decided");
+    assert.equal(settled.decision.approvals.length, 2);
+    const checkpoint = await (await fetch(`${origin}/v1/sessions/${created.id}/checkpoints`, {
+      method: "POST", headers, body: JSON.stringify({ actor: "Maya" }),
+    })).json();
+    const sealed = await (await fetch(`${origin}/v1/relays/${checkpoint.id}`, {
+      headers: { authorization: `Bearer ${created.token}` },
+    })).json();
+    assert.deepEqual(sealed.capsule.decisions, ["Try both finalists in store"]);
+  });
+});

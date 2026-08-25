@@ -172,7 +172,7 @@ function checkpointCapsule(session) {
         : [`Greptile findings remaining: ${metrics.remaining}`, `Shared brief version: ${session.version}`],
       blocked: !decisionMode && metrics.unknown ? [`${metrics.unknown} Greptile finding(s) have unknown status.`] : [],
     },
-    decisions: [],
+    decisions: session.decision?.status === "decided" ? [session.decision.proposal] : [],
     constraints: [session.brief.constraint].filter(Boolean),
     artifacts: [
       ...(session.repository.remote === "github" && session.repository.name.includes("/")
@@ -425,6 +425,20 @@ export async function createRelayServer(options = {}) {
         sessionRateLimiter.check(sessionMemoryMatch[1], 2);
         const body = await readJson(request);
         sendJson(response, 200, await sessions.remember(sessionMemoryMatch[1], requestToken(request, url), body.observationIds));
+        return;
+      }
+
+      const sessionDecisionProposalMatch = url.pathname.match(/^\/v1\/sessions\/([0-9a-f-]{36})\/decision\/propose$/i);
+      if (request.method === "POST" && sessionDecisionProposalMatch) {
+        sessionRateLimiter.check(sessionDecisionProposalMatch[1], 2);
+        sendJson(response, 200, await sessions.proposeDecision(sessionDecisionProposalMatch[1], requestToken(request, url), await readJson(request)));
+        return;
+      }
+
+      const sessionDecisionApprovalMatch = url.pathname.match(/^\/v1\/sessions\/([0-9a-f-]{36})\/decision\/approve$/i);
+      if (request.method === "POST" && sessionDecisionApprovalMatch) {
+        sessionRateLimiter.check(sessionDecisionApprovalMatch[1], 2);
+        sendJson(response, 200, await sessions.approveDecision(sessionDecisionApprovalMatch[1], requestToken(request, url), await readJson(request)));
         return;
       }
 

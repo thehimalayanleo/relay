@@ -22,6 +22,7 @@ The current release is a local or trusted-network prototype. It has no user acco
 
 - Persistent capability-scoped sessions with PM/SWE presence, synchronized briefs, and a common agent activity stream.
 - Personal decision sessions with named participants, one shared conversation, and a decision-aware assistant prompt.
+- Durable consensus: either person can propose an outcome, both approve it, and Relay seals the agreed result into the next checkpoint.
 - A normalized, deduplicated chat endpoint for browser, CLI, iMessage bridges, and other adapters.
 - Browser-local recent-session switching, one-click PM invitations, and 72-hour capability expiry.
 - Goal-first workspace discovery from the host's Greptile-indexed pull requests, plus immediate local sessions that can connect GitHub later.
@@ -254,6 +255,10 @@ Chat adapters can post into the same session without learning provider credentia
 ```bash
 relay session message '<session-link>' --actor Sam --role Partner --platform imessage --message-id message-7 --text 'Motion isolation matters to me.'
 relay session messages '<session-link>'
+
+# Turn the conversation into an explicit shared outcome.
+relay session decide '<session-link>' --actor Ajinkya --actor-id ajinkya --outcome 'Try both finalists in store' --next 'Visit Saturday'
+relay session agree '<session-link>' --actor Maya --actor-id maya
 ```
 
 See [`docs/CHAT_BRIDGE.md`](./docs/CHAT_BRIDGE.md) for the normalized adapter contract and the honest boundary for a future native iMessage extension.
