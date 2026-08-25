@@ -350,6 +350,11 @@ test("shared decisions accept deduplicated chat adapters and use a non-coding ag
     assert.equal(thread.messages.length, 1);
     assert.equal(thread.messages[0].source.platform, "imessage");
 
+    await fetch(`${origin}/v1/sessions/${created.id}/decision/propose`, {
+      method: "POST", headers,
+      body: JSON.stringify({ proposal: "Try both finalists", rationale: "Motion isolation matters", actor: "Sam", actorId: "sam" }),
+    });
+
     await fetch(`${origin}/v1/sessions/${created.id}/checkpoints`, { method: "POST", headers, body: JSON.stringify({ actor: "Sam" }) });
     const agent = await fetch(`${origin}/v1/sessions/${created.id}/agent/run`, {
       method: "POST", headers, body: JSON.stringify({ requestedBy: "Relay · shared assistant", target: "generic", instructions: "Help us narrow the options." }),
@@ -358,6 +363,8 @@ test("shared decisions accept deduplicated chat adapters and use a non-coding ag
     assert.equal(prompts.length, 1);
     assert.match(prompts[0], /shared assistant helping two people/);
     assert.match(prompts[0], /Sam: I sleep on my side/);
+    assert.match(prompts[0], /Proposed outcome: Try both finalists/);
+    assert.match(prompts[0], /Approvals: 1 of 2/);
     assert.doesNotMatch(prompts[0], /Open the relevant project|resume this task|RunEvals/i);
 
     const finalThread = await (await fetch(`${origin}/v1/sessions/${created.id}/messages`, { headers })).json();

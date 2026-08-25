@@ -199,6 +199,10 @@ function decisionAgentPrompt(session, roleInstructions) {
     .slice(-24)
     .map((event) => `${event.actor || "Participant"}: ${event.value || event.detail}`)
     .join("\n");
+  const decision = session.decision ?? {};
+  const outcomeState = decision.proposal
+    ? `${decision.status === "decided" ? "Agreed" : "Proposed"} outcome: ${decision.proposal}\nApprovals: ${(decision.approvals ?? []).length} of 2${decision.rationale ? `\nRationale: ${decision.rationale}` : ""}${decision.nextStep ? `\nNext step: ${decision.nextStep}` : ""}`
+    : "No outcome has been proposed yet.";
   return `You are Relay, a shared assistant helping two people make a practical decision together.
 
 Shared goal: ${session.brief.problem || session.title}
@@ -207,6 +211,9 @@ Agreement target: ${session.brief.acceptance}
 
 Conversation so far:
 ${conversation || "No messages have been added yet."}
+
+Human-owned decision state:
+${outcomeState}
 
 Respond conversationally to the latest request. Make each person's known preferences explicit, compare concrete tradeoffs, and give one useful next step. Ask at most one high-value question if essential information is missing. Do not mention checkpoints, repositories, code, or internal agent machinery. Do not claim both people agree unless both have said so.
 Use short paragraphs and bullets. Do not use a Markdown table.
